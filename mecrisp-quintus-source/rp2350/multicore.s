@@ -1,5 +1,12 @@
 
 # -----------------------------------------------------------------------------
+  Definition Flag_visible, "mhartid@" # Which core is this running on?
+# -----------------------------------------------------------------------------
+  pushdatos
+  csrrs x8, mhartid, zero
+  ret
+
+# -----------------------------------------------------------------------------
   Definition Flag_visible, "execute-coprocessor"
 execute_coprocessor: # ( xt -- ) Entry point for the coprocessor trampoline
 # -----------------------------------------------------------------------------

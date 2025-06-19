@@ -15,7 +15,10 @@ compiletoflash
 : delay-ticks ( ticks -- )
   cycles ( ticks start )
   begin
-    pause
+    \ Call pause, but only if running on the boot core ID 0.
+    \ The coprocessor has ID 1 and shall not cause a task switch
+    \ if the multitasker is loaded.
+    mhartid@ 0= if pause then
     2dup ( ticks start ticks start )
     cycles ( ticks start ticks start current )
     swap - ( ticks start ticks elapsed )
