@@ -1,12 +1,12 @@
 
 ARMGNU?=riscv64-linux-gnu
-ASFLAGS?=-march=rv32im
+ASFLAGS?=-march=rv32im_zbs
 
 AOPS = --warn --fatal-warnings
 
 all : mecrisp-quintus-rp2350.bin
 
-mecrisp-quintus-rp2350.o : mecrisp-quintus-rp2350.s multicore.s  terminal.s
+mecrisp-quintus-rp2350.o : mecrisp-quintus-rp2350.s
 	$(ARMGNU)-as mecrisp-quintus-rp2350.s -o mecrisp-quintus-rp2350.o $(ASFLAGS)
 
 mecrisp-quintus-rp2350.bin : memmap mecrisp-quintus-rp2350.o
