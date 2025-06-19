@@ -89,6 +89,10 @@
 # set to 1 for 150MHz clocks, otherwise uses the 12MHz xtal clock
 .equ FULLSPEED, 1
 
+.if FULLSPEED
+	.include "clocks.s"
+.endif
+
 # -----------------------------------------------------------------------------
 uart_init:
 # -----------------------------------------------------------------------------
@@ -101,7 +105,6 @@ uart_init:
   sw zero, 0(x15)
 
 .if FULLSPEED
-	.include "clocks.s"
 	addi sp, sp, -4
   	sw ra, 0(sp)
 	call setup_150mhz_clock
