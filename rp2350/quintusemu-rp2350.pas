@@ -79,13 +79,22 @@ begin
             memory[addr + 1] shl 8;
 end;
 
+var pll_locked : boolean = false;
+    clk_sys_selected : byte = 1;
+
 function read32(addr : dword) : dword;
 begin
   if (addr and 3) <> 0 then writeln('Unaligned 32 bit load ', dword2hex(addr));
 
   case addr of
-    $40070018: read32 := 0; // UART Flag Register
-    $40048004: read32 := $80000000; // XOSC always stable and running
+    $40070018:       read32 := 0; // UART Flag Register
+    $40048004: begin read32 := $80000000; pll_locked := false; end; // XOSC always stable and running
+    $40010044: begin read32 := clk_sys_selected; inc(clk_sys_selected); end;  // _CLK_SYS_SELECTED, simply toggle through all possible values
+    $40010038: begin if pll_locked then read32 := 4 else read32 := 1; end;  // _CLK_REF_SELECTED
+    $40020008:       read32 := $C000;
+    $40050000:       read32 := $80000000;
+    $40058000: begin read32 := $80000000; pll_locked := true;  end;
+
   else
     if (addr >= $20000000) and (addr <= $20081FFF) then
     begin
@@ -951,7 +960,7 @@ begin
   repeat
 
   //   writeregister;
-  //  writeln(dword2hex(get_pc), ' : ', printopcode, '  ',  disassemble(get_pc, (read16(get_pc+2) shl 16) or read16(get_pc)) );
+  //   writeln(dword2hex(get_pc), ' : ', printopcode, '  ',  disassemble(get_pc, (read16(get_pc+2) shl 16) or read16(get_pc)) );
   //   writeln;
     execute;
   until false;

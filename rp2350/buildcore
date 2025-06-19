@@ -5,16 +5,16 @@ cat ../common/conditional.txt ../common/acrobatics.txt ../common/disassembler-rv
 fpc -XX quintusemu-rp2350.pas
 rm -f quintusemu-rp2350.o
 
-#  {
-#     echo -e "compiletoflash\n"
-#     cat included.txt
-#     echo -e "hex 20010000 DABBAD00 !\n"
-#     # cat -
-#  } | ./quintusemu-rp2350 mecrisp-quintus-rp2350.bin
-#
-#  echo -e ""
-#
-#  mv coredump.bin mecrisp-quintus-rp2350-with-tools.bin
+{
+   echo -e "compiletoflash\n"
+   cat included.txt
+   echo -e "hex 20010000 DABBAD00 !\n"
+   # cat -
+} | ./quintusemu-rp2350 mecrisp-quintus-rp2350.bin
+
+echo -e ""
+
+mv coredump.bin mecrisp-quintus-rp2350-with-tools.bin
 
 ./uf2conv.py --family 0xE48BFF57 --base 0x10000000 mecrisp-quintus-rp2350.bin            -o mecrisp-quintus-rp2350.uf2
-# ./uf2conv.py --family 0xE48BFF57 --base 0x10000000 mecrisp-quintus-rp2350-with-tools.bin -o mecrisp-quintus-rp2350-with-tools.uf2
+./uf2conv.py --family 0xE48BFF57 --base 0x10000000 mecrisp-quintus-rp2350-with-tools.bin -o mecrisp-quintus-rp2350-with-tools.uf2

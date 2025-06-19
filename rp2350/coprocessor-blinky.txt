@@ -1,0 +1,33 @@
+
+\ Let it shine! This example blinks the green LED on GPIO 25.
+
+$40028000 constant IO_BANK0_BASE
+
+IO_BANK0_BASE 25 8 * +     constant GPIO_25_STATUS
+IO_BANK0_BASE 25 8 * + 4 + constant GPIO_25_CTRL
+
+$40038000 constant PADS_BANK0_BASE
+
+PADS_BANK0_BASE 25 1+ 4 * + constant GPIO_25_PAD
+
+$D0000000 constant SIO_BASE
+
+SIO_BASE $004 + constant  GPIO_IN
+SIO_BASE $010 + constant  GPIO_OUT
+SIO_BASE $030 + constant  GPIO_OE
+
+: blinky ( -- )
+    5 GPIO_25_CTRL !  \ Set GPIO[25] function to single-cyle I/O: Function 5 SIO
+  $34 GPIO_25_PAD  !   \ Remove pad isolation control bit and select drive strength to 12 mA
+  1 25 lshift gpio_oe ! \ Set LED pin as output
+
+  begin
+    1 25 lshift gpio_out !
+    300 ms
+              0 gpio_out !
+    500 ms
+  again
+;
+
+stop-coprocessor
+' blinky execute-coprocessor

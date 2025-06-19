@@ -24,8 +24,13 @@ compiletoflash
   2drop
 ;
 
-: ms ( u -- ) 12000 * delay-ticks ;
-: us ( u -- )    12 * delay-ticks ;
+\ For 12 MHz
+\ : ms ( u -- )  12000 * delay-ticks ;
+\ : us ( u -- )     12 * delay-ticks ;
+
+\ For 150 MHz
+  : ms ( u -- ) 150000 * delay-ticks ;
+  : us ( u -- )    150 * delay-ticks ;
 
 \ -----------------------------------------------------------------------------
 
