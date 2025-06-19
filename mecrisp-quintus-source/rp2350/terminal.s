@@ -89,10 +89,6 @@
 # set to 1 for 150MHz clocks, otherwise uses the 12MHz xtal clock
 .equ FULLSPEED, 1
 
-.if FULLSPEED
-	.include "clocks.s"
-.endif
-
 # -----------------------------------------------------------------------------
 uart_init:
 # -----------------------------------------------------------------------------
@@ -105,11 +101,7 @@ uart_init:
   sw zero, 0(x15)
 
 .if FULLSPEED
-	addi sp, sp, -4
-  	sw ra, 0(sp)
-	call setup_150mhz_clock
-  	lw ra, 0(sp)
-  	addi sp, sp, 4
+	.include "clocks.s"
 .else
   # Configure XOSC to use 12 MHz crystal
 

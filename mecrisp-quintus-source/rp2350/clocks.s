@@ -48,6 +48,20 @@
 
 
 setup_150mhz_clock:
+	addi sp, sp, -48
+  	sw ra, 0(sp)
+  	sw x3, 4(sp)
+	sw x4, 8(sp)
+  	sw x5, 12(sp)
+  	sw x6, 16(sp)
+  	sw x7, 20(sp)
+  	sw x8, 24(sp)
+  	sw x9, 28(sp)
+  	sw x10, 32(sp)
+  	sw x11, 36(sp)
+  	sw x12, 40(sp)
+  	sw x13, 44(sp)
+
 	# Disable Resus
 	li t1, CLOCKS_BASE
 	sw zero, _CLK_SYS_RESUS_CTRL(t1)
@@ -223,4 +237,16 @@ setup_150mhz_clock:
 	li t2, 1<<16
 	sw t2, _CLK_ADC_DIV(t1)
 
-	ret
+  	lw ra, 0(sp)
+  	lw x3, 4(sp)
+	lw x4, 8(sp)
+  	lw x5, 12(sp)
+  	lw x6, 16(sp)
+  	lw x7, 20(sp)
+  	lw x8, 24(sp)
+  	lw x9, 28(sp)
+  	lw x10, 32(sp)
+  	lw x11, 36(sp)
+  	lw x12, 40(sp)
+  	lw x13, 44(sp)
+  	addi sp, sp, 48
