@@ -1,6 +1,7 @@
 *.o
 *.elf
 *.bin
+*.list
 buildit
 debug-it
 term
