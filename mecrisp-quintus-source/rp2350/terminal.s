@@ -19,6 +19,7 @@
 .include "interrupts.s"
 .include "cycles.s"
 .include "../common/terminalhooks.s"
+.include "../common/roll.s"
 .include "multicore.s"
 
 # -----------------------------------------------------------------------------
@@ -88,7 +89,6 @@
 
 # set to 1 for 150MHz clocks, otherwise uses the 12MHz xtal clock
 .equ FULLSPEED, 1
-
 # -----------------------------------------------------------------------------
 uart_init:
 # -----------------------------------------------------------------------------
