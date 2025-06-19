@@ -1,0 +1,511 @@
+
+\ -----------------------------------------------------------------------------
+\   Online-Help for Mecrisp-Quintus
+\ -----------------------------------------------------------------------------
+
+: bounds ( a u -- a+u a ) over + swap 2-foldable ;
+
+: collectchar ( data u c -- data' u+1 )
+  over 3 and 8 * lshift rot or
+  over 3 and 3 = if , 0 then
+  swap
+  1+
+;
+
+: <textblock> ( -- ) \ Parses "name". Writes a large string into dictionary.
+  <builds postpone 0-foldable
+
+  here >r 4 allot \ Reserve space for length cell
+
+  0 \ Collect chars for writing later
+  0 \ Number of bytes written
+
+  begin
+    query
+    source s" </textblock>" compare not
+  while
+    cr
+    source bounds ?do i c@ collectchar loop
+    10 collectchar
+  repeat
+  cr
+
+  dup 3 and if swap , else nip then \ Write remaining chars
+
+  r> compiletoram? if ! else flash! then \ Save length
+
+  query
+
+  does> dup 4 + swap @
+;
+
+\ -----------------------------------------------------------------------------
+\   Idea of creating help content:
+\   Definition names start at the first character of a line.
+\   If a line starts with a space, it contains additional info to be printed.
+\ -----------------------------------------------------------------------------
+<textblock> helptext
+emit? ( -- Flag ) Ready to send a character ?
+key? ( -- Flag ) Checks if a key is waiting
+key ( -- Char ) Waits for and fetches the pressed key
+emit ( Char -- ) Emits a character.
+hook-emit? ( -- a-addr ) Hooks for redirecting
+hook-key? ( -- a-addr ) terminal IO
+hook-key ( -- a-addr ) on the fly
+hook-emit ( -- a-addr )
+serial-emit? ( -- Flag ) Serial interface
+serial-key? ( -- Flag ) terminal routines
+serial-key ( -- Char ) as default communications
+serial-emit ( Char -- )
+hook-pause ( -- a-addr ) Hook for a multitasker
+pause ( -- ) Task switch, none for default
+depth ( -- +n ) Gives number of single-cell stack items.
+nip ( x1 x2 -- x2 )
+drop ( x -- )
+rot ( x1 x2 x3 -- x2 x3 x1 )
+-rot ( x1 x2 x3 -- x3 x1 x2 )
+swap ( x1 x2 -- x2 x1 )
+tuck ( x1 x2 -- x2 x1 x2 )
+over ( x1 x2 -- x1 x2 x1 )
+?dup ( x -- 0 | x x )
+dup ( x -- x x )
+pick ( ... xi+1 xi ... x1 x0 i -- ... x1 x0 xi )
+ Picks one element from deep below
+>r ( x -- ) (R: -- x )
+r> ( -- x ) (R: x -- )
+r@ ( -- x ) (R: x -- x )
+rdrop ( -- ) (R: x -- )
+rdepth ( -- +n ) Gives number of return stack items.
+rpick ( i -- xi ) R: ( ... xi ... x0 -- ... xi ... x0 )
+2nip ( x1 x2 x3 x4 -- x3 x4 )
+2drop ( x1 x2 -- )
+2rot ( x1 x2 x3 x4 x5 x6 -- x3 x4 x5 x6 x1 x2 )
+2-rot ( x1 x2 x3 x4 x5 x6 -- x5 x6 x1 x2 x3 x4 )
+2swap ( x1 x2 x3 x4 -- x3 x4 x1 x2 )
+2tuck ( x1 x2 x3 x4 -- x3 x4 x1 x2 x3 x4 )
+2over ( x1 x2 x3 x4 -- x1 x2 x3 x4 x1 x2 )
+2dup ( x1 x2 -- x1 x2 x1 x2 )
+2>r ( x1 x2 -- ) (R: -- x1 x2 )
+2r> ( -- x1 x2 ) (R: x1 x2 -- )
+2r@ ( -- x1 x2 ) (R: x1 x2 -- x1 x2 )
+2rdrop ( -- ) (R: x1 x2 -- )
+sp@ ( -- a-addr ) Fetch data stack pointer
+sp! ( a-addr -- ) Store data stack pointer
+rp@ ( -- a-addr ) Fetch return stack pointer
+rp! ( a-addr -- ) Store return stack pointer
+arshift ( x1 u -- x2 ) Arithmetric right-shift of u bit-places
+rshift ( x1 u -- x2 ) Logical right-shift of u bit-places
+lshift ( x1 u -- x2 ) Logical left-shift of u bit-places
+shr ( x1 -- x2 ) Logical right-shift of one bit-place
+shl ( x1 -- x2 ) Logical left-shift of one bit-place
+ror ( x1 -- x2 ) Logical right-rotation of one bit-place
+rol ( x1 -- x2 ) Logical left-rotation of one bit-place
+bic ( x1 x2 -- x3 ) Bit clear, identical to "not and"
+not ( x1 -- x2 ) Invert all bits
+xor ( x1 x2 -- x3 ) Bitwise Exclusive-OR
+or ( x1 x2 -- x3 ) Bitwise OR
+and ( x1 x2 -- x3 ) Bitwise AND
+false ( -- 0 ) False-Flag
+true ( -- -1 ) True-Flag
+clz ( x1 -- u ) Count leading zeros
+u/mod ( u1 u2 -- u3 u4 ) 32/32 = 32 rem 32 Division
+ u1 / u2 = u4 remainder u3
+/mod ( n1 n2 -- n3 n4 ) n1 / n2 = n4 rem n3
+mod ( n1 n2 -- n3 ) n1 / n2 = remainder n3
+/ ( n1 n2 -- n3 ) n1 / n2 = n3
+* ( u1|n1 u2|n2 -- u3|n3 ) 32*32 = 32 Multiplication
+min ( n1 n2 -- n1|n2 ) Keeps smaller of top two items
+max ( n1 n2 -- n1|n2 ) Keeps greater of top two items
+umin ( u1 u2 -- u1|u2 ) Keeps unsigned smaller
+umax ( u1 u2 -- u1|u2 ) Keeps unsigned greater
+2- ( u1|n1 -- u2|n2 ) Subtracts two, optimized
+1- ( u1|n1 -- u2|n2 ) Subtracts one, optimized
+2+ ( u1|n1 -- u2|n2 ) Adds two, optimized
+1+ ( u1|n1 -- u2|n2 ) Adds one, optimized
+even ( u1|n1 -- u2|n2 ) Makes even. Adds one if uneven.
+2* ( n1 -- n2 ) Arithmetric left-shift
+2/ ( n1 -- n2 ) Arithmetric right-shift
+abs ( n -- u ) Absolute value
+negate ( n1 -- n2 ) Negate
+- ( u1|n1 u2|n2 -- u3|n3 ) Subtraction
++ ( u1|n1 u2|n2 -- u3|n3 ) Addition
+um* ( u1 u2 -- ud ) 32*32 = 64 Multiplication
+ud* ( ud1|d1 ud2|d2 -- ud3|d3 ) 64*64 = 64 Multiplication
+udm* ( ud1 ud2 -- ud3-Low ud4-High ) 64*64=128 Multiplication
+um/mod ( ud u1 -- u2 u3 ) ud / u1 = u3 remainder u2
+ud/mod ( ud1 ud2 -- ud3 ud4 ) 64/64 = 64 rem 64 Division
+ ud1 / ud2 = ud4 remainder ud3
+m* ( n1 n2 -- d ) n1 * n2 = d
+m/mod ( d n1 -- n2 n3 ) d / n1 = n3 remainder r2
+d/mod ( d1 d2 -- d3 d4 ) d1 / d2 = d4 remainder d3
+d/ ( d1 d2 -- d3 ) d1 / d2 = d3
+*/ ( n1 n2 n3 -- n4 ) n1 * n2 / n3 = n4
+u*/ ( u1 u2 u3 -- u4 ) u1 * u2 / u3 = u4
+*/mod ( n1 n2 n3 -- n4 n5 ) n1 * n2 / n3 = n5 remainder n4
+u*/mod ( u1 u2 u3 -- u4 u5 ) u1 * u2 / u3 = u5 remainder u4
+d2* ( d1 -- d2 ) Arithmetric left-shift
+d2/ ( d1 -- d2 ) Arithmetric right-shift
+dshl ( ud1 -- ud2 ) Logical left-shift, same as d2*
+dshr ( ud1 -- ud2 ) Logical right-shift
+dabs ( d -- ud ) Absolute value
+dnegate ( d1 -- d2 ) Negate
+d- ( ud1|d1 ud2|d2 -- ud3|d3 ) Subtraction
+d+ ( ud1|d1 ud2|d2 -- ud3|d3 ) Addition
+s>d ( n -- d ) Makes a signed single number double length
+u<= ( u1 u2 -- flag ) Unsigned comparisions
+u>= ( u1 u2 -- flag )
+u> ( u1 u2 -- flag )
+u< ( u1 u2 -- flag )
+<= ( n1 n2 -- flag ) Signed comparisions
+>= ( n1 n2 -- flag )
+> ( n1 n2 -- flag )
+< ( n1 n2 -- flag )
+0< ( n - flag ) Negative ?
+0<> ( x -- flag )
+0= ( x -- flag )
+<> ( x1 x2 -- flag )
+= ( x1 x2 -- flag )
+du> ( ud1 ud2 -- flag )
+du< ( ud1 ud2 -- flag )
+d> ( d1 d2 -- flag )
+d< ( d1 d2 -- flag )
+d0< ( d -- flag )
+d0= ( d -- flag )
+d<> ( d1 d2 -- flag )
+d= ( d1 d2 -- flag )
+f/ ( df1 df2 -- df3 ) Division of two fixpoint numbers
+f* ( df1 df2 -- df3 ) Multiplication
+hold< ( char -- )
+ Adds character to pictured number output buffer
+ from behind.
+f#S ( n-comma1 -- n-comma2 )
+ Adds 32 comma-digits to number output
+f# ( n-comma1 -- n-comma2 )
+ Adds one comma-digit to number output
+f. ( df -- )
+ Prints a fixpoint number with 32 fractional digits
+f.n ( df n -- )
+ Prints a fixpoint number with n fractional digits
+number ( c-addr length -- 0 | n 1 | n-low n-high 2)
+ Tries to convert a string to a number.
+binary ( -- ) Sets base to 2
+decimal ( -- ) Sets base to 10
+hex ( -- ) Sets base to 16
+base ( -- a-addr ) Base variable address
+move ( c-addr1 c-addr2 u -- ) Moves u Bytes in Memory
+fill ( c-addr u c ) Fill u Bytes of Memory with value c
+cbit@ ( mask c-addr -- flag ) Test BIts in byte-location
+hbit@ ( mask a-addr -- flag ) Test BIts in halfword-location
+bit@ ( mask a-addr -- flag ) Test BIts in word-location
+cxor! ( mask c-addr -- ) Toggle bits in byte-location
+hxor! ( mask a-addr -- ) Toggle bits in halfword-location
+xor! ( mask a-addr -- ) Toggle bits in word-location
+cbic! ( mask c-addr -- ) Clear BIts in byte-location
+hbic! ( mask a-addr -- ) Clear BIts in halfword-location
+bic! ( mask a-addr -- ) Clear BIts in word-location
+cbis! ( mask c-addr -- ) Set BIts in byte-location
+hbis! ( mask a-addr -- ) Set BIts in halfword-location
+bis! ( mask a-addr -- ) Set BIts in word-location
+2constant name ( ud|d -- ) Makes a double constant.
+constant name ( u|n -- ) Makes a single constant.
+2variable name ( ud|d -- ) Makes an initialized double variable
+variable name ( n|n -- ) Makes an initialized single variable
+nvariable name ( n1*u|n n1 -- ) Makes an initialized variable with
+ specified size of n1 words
+ Maximum is 15 words
+buffer: name ( u -- ) Creates a buffer in RAM with u bytes length
+2@ ( a-addr -- ud|d ) Fetches double number from memory
+2! ( ud|d a-addr -- ) Stores double number in memory
+@ ( a-addr -- u|n ) Fetches single number from memory
+! ( u|n a-addr -- ) Stores single number in memory
++! ( u|n a-addr -- ) Add to memory location
+h@ ( c-addr -- char ) Fetches halfword from memory
+h! ( char c-addr ) Stores halfword in memory
+h+! ( u|n a-addr -- ) Add to halfword memory location
+c@ ( c-addr -- char ) Fetches byte from memory
+c! ( char c-addr ) Stores byte in memory
+c+! ( u|n a-addr -- ) Add to byte memory location
+type ( c-addr length -- ) Prints a string.
+s" Hello" Compiles a string and
+ ( -- c-addr length )
+ gives back its address and length when executed.
+
+." Hello" Compiles a string and
+ ( -- )
+ prints it when executed.
+( Comment ) Ignore Comment
+\ Comment Comment to end of line
+cr ( -- ) Emits line feed
+bl ( -- 32 ) ASCII code for Space
+space ( -- ) Emits space
+spaces ( n -- ) Emits n spaces if n is positive
+compare ( caddr-1 len-1 c-addr-2 len-2 -- flag )
+ Compares two strings
+accept ( c-addr maxlength -- length ) Read input into a string.
+ctype ( cstr-addr -- )
+ Prints a counted string.
+c" Hello" Compiles a counted string and
+ ( -- cstr-addr )
+ gives back its address when executed.
+count ( cstr-addr -- c-addr length )
+ Convert counted string into addr-length string
+skipstring ( cstr-addr -- a-addr )
+ Increases the pointer to the aligned end of the string.
+.digit ( u -- char ) Converts a digit to a char
+digit ( char -- u true | false ) Converts a char to a digit
+[char] * Compiles code of following char
+ ( -- char ) when executed
+char * ( -- char ) gives code of following char
+hold ( char -- ) Adds character to pictured number
+ output buffer from the front.
+sign ( n -- ) Add a minus sign to pictured number
+ output buffer, if n is negative
+#S ( ud1|d1 -- 0 0 ) Add all remaining digits
+ from the double length number to output buffer
+# ( ud1|d1 -- ud2|d2 ) Add one digit from the
+ double length number to output buffer
+#> ( ud|d -- c-addr len )
+ Drops double-length number and finishes
+ pictured numeric output ready for type
+<# ( -- ) Prepare pictured number output buffer
+u. ( u -- ) Print unsigned single number
+. ( n -- ) Print single number
+ud. ( ud -- ) Print unsigned double number
+d. ( d -- ) Print double number
+words ( -- ) Prints list of defined words.
+.s ( many -- many ) Prints stack contents, signed
+u.s ( many -- many ) Prints stack contents, unsigned
+h.s ( many -- many ) Prints stack contents, unsigned, hex
+hex. ( u -- ) Prints 32 bit unsigned in hex base, needs emit only.
+ This is independent of number subsystem.
+query ( -- ) Fetches user input to input buffer
+tib ( -- cstr-addr ) Input buffer
+current-source ( -- addr ) Double-Variable which contains source
+setsource ( c-addr len -- ) Change source
+source ( -- c-addr len ) Current source
+>in ( -- addr ) Variable with current offset into source
+token ( -- c-addr len ) Cuts one token out of input buffer
+parse ( char -- c-addr len )
+ Cuts anything delimited by char out of input buffer
+evaluate ( any addr len -- any ) Interpret given string
+interpret ( any -- any ) Execute, compile, fold, optimize...
+quit ( many -- ) (R: many -- ) Resets Stacks
+hook-quit ( -- a-addr ) Hook for changing the inner quit loop
+align ( -- ) Aligns dictionary pointer
+aligned ( c-addr -- a-addr ) Advances to next aligned address
+cell+ ( x -- x+4 ) Add size of one cell
+cells ( n -- 4*n ) Calculate size of n cells
+unused ( -- u ) Get current amount of free memory
+allot ( n -- ) Tries to advance Dictionary Pointer by n bytes
+ Aborts, if not enough space available
+here ( -- a-addr|c-addr )
+ Gives current position in Dictionary
+, ( u|n -- ) Appends a single number to dictionary
+h, ( u|n -- ) Appends a halfword to dictionary
+compiletoram? ( -- ? ) Currently compiling into ram ?
+compiletoram ( -- ) Makes ram the target for compiling
+compiletoflash ( -- ) Makes flash the target for compiling
+forgetram ( -- ) Forget definitions in ram without a reset
+string, ( c-addr len -- ) Inserts a string of maximum 255 characters without runtime
+literal, ( u|n -- ) Compiles a literal with runtime
+inline, ( a-addr -- ) Inlines the choosen subroutine
+call, ( a-addr -- ) Compiles a call to a subroutine
+flashvar-here ( -- a-addr ) Gives current RAM management pointer
+dictionarystart ( -- a-addr ) Current entry point for dictionary search
+dictionarynext ( a-addr -- a-addr flag )
+ Scans dictionary chain and returns true if end is reached.
+smudge ( -- ) Makes current definition visible, burns
+ collected flags to flash and
+ takes care of proper ending
+inline ( -- ) Makes current definition inlineable.
+ For flash, place it inside your definition !
+immediate ( -- ) Makes current definition immediate.
+ For flash, place it inside your definition !
+compileonly ( -- ) Makes current definition compileonly.
+ For flash, place it inside your definition !
+setflags ( char -- ) Sets Flags with a mask. This isn't immediate,
+ but for flash, place it inside your definition !
+(create) name ( -- ) Creates and links a new invisible dictionary
+ header that does nothing.
+ Use FIG-style <builds .. does> !
+find ( c-addr len -- a-addr flags )
+ Searches for a String in Dictionary.
+ Gives back flags, which are different to ANS !
+0-foldable ( -- ) Current definition becomes foldable with zero constants
+1-foldable ( -- ) Current definition becomes foldable with one constants
+2-foldable ( -- ) Current definition becomes foldable with two constants
+3-foldable ( -- ) Current definition becomes foldable with 3 constants
+4-foldable ( -- ) Current definition becomes foldable with 4 constants
+5-foldable ( -- ) Current definition becomes foldable with 5 constants
+6-foldable ( -- ) Current definition becomes foldable with 6 constants
+7-foldable ( -- ) Current definition becomes foldable with 7 constants
+execute ( a-addr -- ) Calls subroutine
+recurse ( -- ) Lets the current definition call itself
+' name ( -- a-addr ) Tries to find name in dictionary
+ gives back executable address
+['] name ( -- a-addr) Tick that compiles the executable address
+ of found word as literal
+postpone name ( -- ) Helps compiling immediate words.
+does> ( -- ) executes: ( -- a-addr )
+ Gives address to where you have stored data.
+<builds ( -- ) Makes Dictionary header and reserves space
+ for special call.
+create name ( -- ) Create a definition with default action which
+ cannot be changed later. Use <builds does> instead.
+ Equivalent to : create <builds does> ;
+state ( -- a-addr ) Address of state variable
+] ( -- ) Switch to compile state
+[ ( -- ) Switch to execute state
+; ( -- ) Finishes new definition
+: name ( -- ) Opens new definition
+then ( -- ) This is the common
+else ( -- ) flag if ... [else ...] then
+if ( flag -- ) structure.
+ahead ( -- )
+case ( n -- n ) Begins case structure
+of ( m -- ) Compares m with n, choose this if n=m
+?of ( flag -- ) Flag-of, for custom comparisions
+endof ( -- ) End of one possibility
+endcase ( n -- ) Ends case structure, discards n
+repeat ( -- ) Finish of a middle-flag-checking loop.
+while ( flag -- ) Check a flag in the middle of a loop
+until ( flag -- ) begin ... flag until
+ loops until flag is true
+again ( -- ) begin ... again
+ is an endless loop
+begin ( -- )
+k ( -- u|n ) Gives third loop index
+j ( -- u|n ) Gives second loop index
+i ( -- u|n ) Gives innermost loop index
+unloop (R: old-limit old-index -- )
+ Drops innermost loop structure,
+ pops back old loop structures to loop registers
+exit ( -- ) Returns from current definition.
+ Compiles a ret opcode.
+leave ( -- ) (R: old-limit old-index -- )
+ Leaves current innermost loop promptly
++loop ( u|n -- )
+ (R: unchanged | old-limit old-index -- )
+ Adds number to current loop index register
+ and checks whether to continue or not
+loop ( -- )
+ (R: unchanged | old-limit old-index -- )
+ Increments current loop index register by one
+ and checks whether to continue or not.
+?do ( Limit Index -- )
+ (R: unchanged | -- old-limit old-index )
+ Begins a loop if limit and index are not equal
+do ( Limit Index -- )
+ (R: -- old-limit old-index )
+ Begins a loop
+
+</textblock>
+
+\ -----------------------------------------------------------------------------
+
+: helpnext ( addr -- addr flag )
+
+  \ Advance addr until either "LF non-space-character" or end of help text is reached
+
+  begin
+    dup helptext + u>= ?dup if exit then \ Still inside of the block ?
+    1+
+
+    dup  1- c@ 10 =  \ LF at this position ?
+    over    c@ 32 u>  \ A character different from space at the next position ?
+    and
+  until
+
+  dup c@ 32 u<
+;
+
+: helptoken ( addr -- addr len ) \ Get token from help separated by next whitespace.
+
+  dup dup
+
+  begin
+    dup c@ 32 u>
+  while
+    1+
+  repeat
+
+  swap -
+;
+
+: helpcontent ( addr -- addr len ) \ Get length of help contents for this entry
+  dup dup helpnext drop swap -
+;
+
+: helpfind ( addr len -- pos | 0 )
+
+  helptext bounds 1+ do
+    i 1- c@ 10 =
+    if
+      2dup i helptoken compare
+      if i unloop nip nip exit then
+    then
+  loop
+  2drop false
+;
+
+\ -----------------------------------------------------------------------------
+
+: help ( -- ) \ Scans for "name"
+
+  token ( addr len )
+
+  dup 0=
+  if
+    ." Usage: help definition" cr
+    2drop exit
+  then
+
+  cr
+  2dup helpfind ?dup
+  if
+    helpcontent type
+    2drop
+  else
+    ." No help entry for " type cr
+  then
+;
+
+: glossary-list ( -- ) \ List all definitions for this help entries exist
+  cr
+  helptext drop
+  begin
+    dup helptoken type space
+    helpnext
+  until
+  drop
+;
+
+: undoc ( -- ) \ List all definitions which have no help entry
+  cr
+  dictionarystart
+  begin
+    dup 8 + count helpfind 0= if dup 8 + ctype space then
+    dictionarynext
+  until
+  drop
+;
+
+: unavail ( -- ) \ List all help entries without defitions
+  cr
+  helptext drop
+  begin
+    dup helptoken 2dup find drop 0= if type space else 2drop then
+    helpnext
+  until
+  drop
+;
+
+\ -----------------------------------------------------------------------------
+
+undoc
+
+unavail
+
+help 2+
+help u/mod
+help nix

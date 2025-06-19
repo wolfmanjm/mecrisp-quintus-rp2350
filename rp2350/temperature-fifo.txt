@@ -1,0 +1,57 @@
+
+\ Small example on how to use the Analog-Digital-Converter with FIFOs.
+
+$40010000 constant CLOCKS_BASE
+
+CLOCKS_BASE $6C + constant CLK_ADC_CTRL
+CLOCKS_BASE $70 + constant CLK_ADC_DIV
+
+$400A0000 constant ADC_BASE
+
+ADC_BASE $00 + constant ADC-CS     \ ADC Control and Status
+ADC_BASE $04 + constant ADC-RESULT \ Result of most recent ADC conversion
+ADC_BASE $08 + constant ADC-FCS    \ FIFO control and status
+ADC_BASE $0c + constant ADC-FIFO   \ Conversion result FIFO
+ADC_BASE $10 + constant ADC-DIV    \ Clock divider. If non-zero, CS_START_MANY will start conversions at regular intervals rather than back-to-back.
+                                   \ The divider is reset when either of these fields are written. Total period is 1 + INT + FRAC / 256
+ADC_BASE $14 + constant ADC-INTR   \ Raw Interrupts
+ADC_BASE $18 + constant ADC-INTE   \ Interrupt Enable
+ADC_BASE $1c + constant ADC-INTF   \ Interrupt Force
+ADC_BASE $20 + constant ADC-INTS   \ Interrupt status after masking & forcing
+
+: adc>u ( u -- f ) 0 swap 3,3 4096,0 f/ f*  1-foldable ; \ Convert ADC result in voltage reading
+
+: u>degreeC ( f -- f' ) \ T = 27 - (ADC_voltage - 0.706)/0.001721
+
+  0,706 d-
+  1,0 0,001721 f/ f*
+  27,0 2swap d-
+
+2-foldable ;
+
+: temp ( -- )
+
+  1 11 lshift                     \ Enable clock generator
+  3  5 lshift or CLK_ADC_CTRL !   \ XOSC as source
+
+  %11 adc-cs !                    \ Enable ADC and temperature sensor
+  $8000 8 lshift adc-div !        \ Delay between samples, integer part
+
+  1 24 lshift    \ Threshold: Trigger when at least 1 sample in FIFO
+  1 11 lshift or \ Clear overflow
+  1 10 lshift or \ Clear underflow
+  1  0 lshift or \ Enable
+  adc-fcs !
+
+  4 12 lshift %1011 or adc-cs !  \ Start multiple conversions on channel 4, temperature sensor
+
+  begin
+    begin adc-fcs @ 16 rshift $F and until \ Wait for the FIFO to contain data
+    adc-fifo @ dup hex. ." : "
+                   adc>u 2dup 3 f.n ." V "
+                         u>degreeC 1 f.n ." °C" cr
+
+  key? until
+
+  0 adc-cs !
+;

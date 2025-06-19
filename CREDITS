@@ -1,0 +1,53 @@
+
+Contributions:
+
+Fixpoint math library by Andrew Palm
+Sunset and sunrise calculations by Andrew Palm
+Port for PIC32MX270F256B by Baldwin Robertson
+Port for HiFive1 revision B by Paul Dickson
+Examples for GD32VF103CB by Terry Porter
+A collection of libraries, drivers and demos for GD32VF103CB by Martin Bitter
+VIS extension (https://forth-ev.de/wiki/projects:forth-namespaces:start) by Manfred Mahlow
+CSRs for GD32VF103 by Wolfgang Strauss
+Interrupts on GD32VF103 by Wolfgang Strauss
+Conditional compilation, Forth 200x style by Manfred Mahlow
+Femtosoc and the FemtoRV32 processor for HX1K by Bruno Levy
+ASCII Art by Veronica Karlsson
+OpenOCD flashing instructions for GD32VF103 by Theo Zanibellato
+Port for CH56X by Hans Baier:
+  https://github.com/hansfbaier/mecrisp-quintus-ch56x-port
+  https://github.com/hansfbaier/mecrisp-quintus-ch56x-boardsupport
+Port for CH32V203F8P6 by Ivan Dimitrov
+Port for Thejas32 by Amith
+Port for CH32L103 by Peter Schildmann
+
+Hardware donations:
+
+SiFive
+Klaus Kohl-Schöpe
+Ulrich Hoffmann
+Jürgen Pintaske
+Paul Boddie
+Amith
+Jan Bramkamp
+
+Testing and hints in alphabetical order:
+
+Martin Bitter
+Paul Boddie
+Robert Clausecker
+Michael Kalus
+Manfred Mahlow
+Ingolf Pohl
+Terry Porter
+Wolfgang Strauss
+Matthias Trute
+Erich Wäldle
+Jim Morris
+
+Inspiring projects:
+
+Logic tricks from the book Hacker's Delight (http://www.hackersdelight.org/)
+PIC32 VGA assembler code by Paul Boddie (https://blogs.fsfe.org/pboddie/?p=1712)
+FemtoRV32 by Bruno Levy and Matthias Koch https://github.com/BrunoLevy/learn-fpga/
+USB-CDC implementation by ulixxe: https://github.com/ulixxe/usb_cdc/
