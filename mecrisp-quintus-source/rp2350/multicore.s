@@ -16,6 +16,8 @@ execute_coprocessor: # ( xt -- ) Entry point for the coprocessor trampoline
   sw x8, 0(x14)
   drop
 
+  call stop_core1 # make sure it is running in bootrom first
+
   # Launcher code running on core 0 here... Save x3 to x13 before use
   # This launches coprocessor_trampoline.
 
@@ -62,8 +64,17 @@ coprocessor_trampoline: # Runs on the second core now
   jalr x1, x14, 0              # Execute it
 
 trampoline_trap:  # In case the Forth definition returns, catch execution here.
-  j trampoline_trap
-
+	.equ BOOTROM_ENTRY_OFFSET, 0x7dfc
+    li a0, BOOTROM_ENTRY_OFFSET + 32 * 1024
+    la a1, 1f
+    csrw mtvec, a1
+    jr a0
+    # Go here if we trapped:
+.p2align 2
+1:  li a0, BOOTROM_ENTRY_OFFSET
+    jr a0
+  	# should not get here
+	j trampoline_trap
 
 
 # -----------------------------------------------------------------------------
