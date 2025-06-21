@@ -23,6 +23,7 @@
 .option norelax
 .option rvc
 .equ compressed_isa, 1
+.equ dualcore, 1
 .equ letsroll, 1
 
 # -----------------------------------------------------------------------------

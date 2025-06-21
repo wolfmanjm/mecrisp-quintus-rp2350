@@ -227,6 +227,7 @@ ramallot Zahlenpuffer, Zahlenpufferlaenge+1 # Reserviere mal großzügig 72 Byte
   ramallot returnstackende, returnstacklength  # Return stack
   ramallot returnstackanfang, 0
 
+.ifdef dualcore
   ramallot datastackcore1end, datastacklength  # Data stack
   ramallot datastackcore1begin, 0
 
@@ -234,6 +235,7 @@ ramallot Zahlenpuffer, Zahlenpufferlaenge+1 # Reserviere mal großzügig 72 Byte
   ramallot returnstackcore1begin, 0
 
   ramallot trampolineaddr, 4
+.endif
 
 .equ Maximaleeingabe,   tiblength        # Input buffer for an Address-Length string
 ramallot Eingabepuffer, Maximaleeingabe  # Eingabepuffer wird einen Adresse-Länge String enthalten

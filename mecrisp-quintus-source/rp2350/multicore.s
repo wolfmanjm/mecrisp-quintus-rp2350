@@ -94,9 +94,23 @@ coprocessor_trampoline: # Runs on the second core now
   jalr x1, x14, 0              # Execute it
 
 trampoline_trap:  # In case the Forth definition returns, catch execution here.
+  slt x0, x0, x0 # WFE h3.block
   j trampoline_trap
 
+# Alternative that puts core 1 back into the bootup state by launching it into the BOOTROM:
 
+#  trampoline_trap:  # In case the Forth definition returns, catch execution here.
+#      .equ BOOTROM_ENTRY_OFFSET, 0x7dfc
+#      li a0, BOOTROM_ENTRY_OFFSET + 32 * 1024
+#      la a1, 1f
+#      csrw mtvec, a1
+#      jr a0
+#      # Go here if we trapped:
+#  .p2align 2
+#  1:  li a0, BOOTROM_ENTRY_OFFSET
+#      jr a0
+#      # should not get here
+#      j trampoline_trap
 
 # -----------------------------------------------------------------------------
 # x0 zero 		Hard-wired zero —

@@ -1,0 +1,101 @@
+
+Mecrisp-Quintus for a special snowflake: RP2350.
+
+-------------------------------------------------------------------------------
+  How to install on the Raspberry Pico:
+-------------------------------------------------------------------------------
+
+Hold BOOTSEL button while plugging in USB.
+Copy mecrisp-quintus-rp2350-with-tools.uf2 into the mass storage device
+
+You need to connect your own USB-serial-cable.
+
+Pico:               Cable:
+
+GND             --  GND
+GP0 (UART RX)  <--  TXD
+GP1 (UART TX)   --> RXD
+
+Communication is done with 115200 baud 8N1.
+
+-------------------------------------------------------------------------------
+  Special features and dictionary handling:
+-------------------------------------------------------------------------------
+
+This target boots from an external SPI flash memory, which is mapped into the
+main memory by XIP logic starting from $10000000.
+
+Mecrisp-Quintus contains a bootloader for this target which copies the Forth
+core and the user flash dictionary into RAM for fast execution, which results
+in a few specialities.
+
+A few lines of explanation will be necessary:
+
+$10000000 to $1003FFFF: 256 kb "memory image" containing the Forth core and the
+                        user definitions in "flash" dictionary.
+
+$10040000 to $1007FFFF: Second 256 kb image
+$10080000 to $100BFFFF: Third  256 kb image and so on
+
+The startup code will copy the Forth core and first user flash dictionary image into RAM:
+
+$20000000 to $20005FFF:  24 kb Forth core in RAM for execution
+$20006000 to $2003FFFF: 232 kb flash user dictionary in RAM for execution
+
+For short: Everything executed resides in RAM, including the traditional "flash dictionary".
+
+Now there are these definitions for handling dictionaries:
+
+  new   ( -- )   Clear the current RAM copy of the "flash dictionary" and restart Forth
+  save  ( -- )   Save  the current RAM copy of the "flash dictionary" to the first image in SPI flash
+                 This is the same as 0 save#
+
+  load#  ( u -- ) Load the u-th image of the "flash dictionary" from the SPI into RAM and restart Forth
+  save#  ( u -- ) Save the current RAM copy of the "flash dictionary" to the u-th image in SPI flash
+  erase# ( u -- ) Erase the u-th image from the SPI flash
+
+The first image, 0, will be loaded automatically on boot, and you can define the traditional "init"
+definition inside to launch your code.
+
+The images are stored in SPI flash at offset address u * $40000, and are 256kb in length.
+
+-------------------------------------------------------------------------------
+  For short:
+-------------------------------------------------------------------------------
+
+Compile as usual using "compiletoflash", and type "save" afterwards.
+
+-------------------------------------------------------------------------------
+  Notes on RAM usage:
+-------------------------------------------------------------------------------
+
+256 kb RAM is reserved for Forth core and "flash dictionary".
+256 kb RAM is reserved for RAM dictionary, buffers and variables.
+
+These values are hardwired, but with a little effort, they can be changed in 4 kb steps.
+
+You can also place large data tables into SPI flash, but reading these will be slow.
+
+-------------------------------------------------------------------------------
+  Notes on using the second processor core:
+-------------------------------------------------------------------------------
+
+  execute-coprocessor ( xt -- ) Execute a ( -- ) definition on the second core
+     stop-coprocessor ( -- )    Stop execution on the second core
+
+            mhartid@  ( -- 0|1) Which core is this running on?
+
+  The second core has its own register set and stacks, but note that many
+  features of the Forth kernel rely on global variables and buffers,
+  especially terminal IO and pictured number output.
+
+  How to best support this feature on a higher level is still open to
+  experiments, you are probably safe if the code "runs silently".
+  You have to manually take care of possible conflicts in hardware access.
+
+-------------------------------------------------------------------------------
+  Credits:
+-------------------------------------------------------------------------------
+
+Many thanks to Jim Morris (wolfmanjm) for assistance conquering this target
+and to Jan Bramkamp (crest) for the hardware donation.

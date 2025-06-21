@@ -13,18 +13,26 @@ PADS_BANK0_BASE 25 1+ 4 * + constant GPIO_25_PAD
 $D0000000 constant SIO_BASE
 
 SIO_BASE $004 + constant  GPIO_IN
+
 SIO_BASE $010 + constant  GPIO_OUT
+SIO_BASE $018 + constant  GPIO_OUT_SET
+SIO_BASE $020 + constant  GPIO_OUT_CLR
+SIO_BASE $028 + constant  GPIO_OUT_XOR
+
 SIO_BASE $030 + constant  GPIO_OE
+SIO_BASE $038 + constant  GPIO_OE_SET
+SIO_BASE $040 + constant  GPIO_OE_CLR
+SIO_BASE $048 + constant  GPIO_OE_XOR
 
 : blinky ( -- )
     5 GPIO_25_CTRL !  \ Set GPIO[25] function to single-cyle I/O: Function 5 SIO
   $34 GPIO_25_PAD  !   \ Remove pad isolation control bit and select drive strength to 12 mA
-  1 25 lshift gpio_oe ! \ Set LED pin as output
+  1 25 lshift gpio_oe_set ! \ Set LED pin as output
 
   begin
-    1 25 lshift gpio_out !
+    1 25 lshift gpio_out_set !
     300 ms
-              0 gpio_out !
+    1 25 lshift gpio_out_clr !
     500 ms
   again
 ;
