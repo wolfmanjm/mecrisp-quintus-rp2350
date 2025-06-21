@@ -1,0 +1,474 @@
+
+\ -------------------------------------------------------------
+\  AltIMU-10 Gyro, Accelerometer, Compass, and Altimeter
+\  L3GD20, LSM303DLHC, and LPS331AP Carrier
+\  https://www.pololu.com/product/1269
+\ -------------------------------------------------------------
+
+\ A few registers for GPIO access
+
+$40028000 constant IO_BANK0_BASE
+
+IO_BANK0_BASE 14 8 * +     constant GPIO_14_STATUS
+IO_BANK0_BASE 14 8 * + 4 + constant GPIO_14_CTRL
+
+IO_BANK0_BASE 15 8 * +     constant GPIO_15_STATUS
+IO_BANK0_BASE 15 8 * + 4 + constant GPIO_15_CTRL
+
+$40038000 constant PADS_BANK0_BASE
+
+PADS_BANK0_BASE 14 1+ 4 * + constant GPIO_14_PAD
+PADS_BANK0_BASE 15 1+ 4 * + constant GPIO_15_PAD
+
+$D0000000 constant SIO_BASE
+
+SIO_BASE $004 + constant  GPIO_IN
+
+SIO_BASE $010 + constant  GPIO_OUT
+SIO_BASE $018 + constant  GPIO_OUT_SET
+SIO_BASE $020 + constant  GPIO_OUT_CLR
+SIO_BASE $028 + constant  GPIO_OUT_XOR
+
+SIO_BASE $030 + constant  GPIO_OE
+SIO_BASE $038 + constant  GPIO_OE_SET
+SIO_BASE $040 + constant  GPIO_OE_CLR
+SIO_BASE $048 + constant  GPIO_OE_XOR
+
+\ -------------------------------------------------------------
+\  Bit-Bang I2C Implementation
+\ -------------------------------------------------------------
+
+\ Low-level target specific pin configurations
+
+1 15 lshift constant i2c-scl
+1 14 lshift constant i2c-sda
+
+: scl-high ( -- ) i2c-scl GPIO_OE_CLR ! ;
+: scl-low  ( -- ) i2c-scl GPIO_OE_SET ! ;
+: sda-high ( -- ) i2c-sda GPIO_OE_CLR ! ;
+: sda-low  ( -- ) i2c-sda GPIO_OE_SET ! ;
+
+: scl-@    ( -- f ) 20 0 do loop GPIO_IN @ i2c-scl and 0<> ;
+: sda-@    ( -- f ) 20 0 do loop GPIO_IN @ i2c-sda and 0<> ;
+
+: I2C-Init ( -- )
+    5 GPIO_14_CTRL !  \ Set GPIO function to single-cyle I/O: Function 5 SIO
+  $52 GPIO_14_PAD  !   \ Remove pad isolation control bit, enable input with schmitt-trigger, and select drive strength to 4 mA
+
+    5 GPIO_15_CTRL !  \ Set GPIO function to single-cyle I/O: Function 5 SIO
+  $52 GPIO_15_PAD  !   \ Remove pad isolation control bit, enable input with schmitt-trigger, and select drive strength to 4 mA
+
+  i2c-scl i2c-sda or GPIO_OUT_CLR !
+  scl-high sda-high \ Bus free default state. During communication, SCL is low for default.
+;
+
+\ -------------------------------------------------------------
+
+\ Low-Level I2C-Protocol
+
+: I2C-Start ( -- ) sda-high scl-high sda-low scl-low ;
+: I2C-Stop  ( -- ) sda-low scl-high sda-high ;
+
+: I2C-Bit-TX ( f -- )
+  if sda-high else sda-low then
+  scl-high begin scl-@ until
+  scl-low
+;
+
+: I2C-Bit-RX ( -- f )
+  sda-high
+
+  scl-high begin scl-@ until
+  sda-@
+  scl-low
+;
+
+\ -------------------------------------------------------------
+\ Higher level I2C-Protocol
+
+: I2C-TX ( b -- f )
+  dup $80 and I2C-Bit-TX
+  dup $40 and I2C-Bit-TX
+  dup $20 and I2C-Bit-TX
+  dup $10 and I2C-Bit-TX
+  dup $08 and I2C-Bit-TX
+  dup $04 and I2C-Bit-TX
+  dup $02 and I2C-Bit-TX
+      $01 and I2C-Bit-TX
+
+  I2C-Bit-RX 0=
+;
+
+: I2C-RX ( f -- b )
+  I2C-Bit-RX $80 and
+  I2C-Bit-RX $40 and or
+  I2C-Bit-RX $20 and or
+  I2C-Bit-RX $10 and or
+  I2C-Bit-RX $08 and or
+  I2C-Bit-RX $04 and or
+  I2C-Bit-RX $02 and or
+  I2C-Bit-RX $01 and or
+
+  swap 0= I2C-Bit-TX
+;
+
+\ -------------------------------------------------------------
+\ I2C device detection
+
+: u.2 s>d <# # # #> type ;
+
+: i2c-ping? ( addr - f ) i2c-start 2*  i2c-tx i2c-stop ;
+: i2c-7bitaddr? ( addr -- f ) dup $7 u>= swap $77 u<= and ;
+
+: i2c-detect   ( -- )
+  i2c-init cr
+    base @ hex
+    4 spaces $10 0 do i space u.2 loop
+
+    $80 0 do
+      i $0f and 0= if
+        cr i u.2 [char] : emit space
+      then
+      i i2c-7bitaddr? if
+        i i2c-ping? if \ does device respond?
+            i space u.2
+          else
+            ."  --"
+        then
+      else
+         ."    "
+      then
+    loop
+    cr base !
+;
+
+\ -------------------------------------------------------------
+\ I2C Register primitives
+
+: i2c-reg! ( data register address -- )
+  i2c-start
+  shl i2c-tx not if ."  I2C device not connected." cr quit then  \ Transmit address
+  i2c-tx drop \ Transmit register
+  i2c-tx drop \ Transmit data
+  i2c-stop
+;
+
+: i2c-first-reg@ ( register address -- data )
+  shl tuck ( address register address )
+  i2c-start
+  i2c-tx not if ."  I2C device not connected." cr quit then  \ Transmit address
+  i2c-tx drop \ Transmit register
+  i2c-start
+  1 or \ Set Read bit in address
+  i2c-tx drop
+  true i2c-rx
+;
+
+: i2c-next-reg@ ( -- data )  true i2c-rx ;
+: i2c-last-reg@ ( -- data ) false i2c-rx i2c-stop ;
+
+
+: i2c-reg@ ( register address -- data )
+  shl tuck ( address register address )
+  i2c-start
+  i2c-tx not if ."  I2C device not connected." cr quit then  \ Transmit address
+  i2c-tx drop \ Transmit register
+  i2c-start
+  1 or \ Set Read bit in address
+  i2c-tx drop
+  false i2c-rx
+  i2c-stop
+;
+
+\ -------------------------------------------------------------
+\   IMU interface
+\ -------------------------------------------------------------
+
+: sign16 ( n16 -- n ) 16 lshift 16 arshift inline 1-foldable ;
+
+\ Constants for the IMU
+
+$6B constant GYRO_ADDR  \ L3GD20 gyro
+$19 constant ACCEL_ADDR  \ LSM303DLHC_DEVICE accel
+$1E constant MAG_ADDR     \ LSM303DLHC_DEVICE magno
+$5D constant PRESSURE_ADDR \ LPS331AP
+
+$20 constant LSM303_CTRL_REG1_A
+$21 constant LSM303_CTRL_REG2_A
+$22 constant LSM303_CTRL_REG3_A
+$23 constant LSM303_CTRL_REG4_A
+$24 constant LSM303_CTRL_REG5_A
+$25 constant LSM303_CTRL_REG6_A
+
+$00 constant LSM303_CRA_REG_M
+$01 constant LSM303_CRB_REG_M
+$02 constant LSM303_MR_REG_M
+$03 constant LSM303_OUT_X_H_M
+
+$28 constant LSM303_OUT_X_L_A
+$29 constant LSM303_OUT_X_H_A
+$2A constant LSM303_OUT_Y_L_A
+$2B constant LSM303_OUT_Y_H_A
+$2C constant LSM303_OUT_Z_L_A
+$2D constant LSM303_OUT_Z_H_A
+
+$31 constant LSM303_TEMP_OUT_H_M
+$32 constant LSM303_TEMP_OUT_L_M
+
+$0F constant L3G_WHOAMI
+$26 constant L3G_OUT_TEMP
+$20 constant L3G_CTRL_REG1
+$21 constant L3G_CTRL_REG2
+$22 constant L3G_CTRL_REG3
+$23 constant L3G_CTRL_REG4
+$24 constant L3G_CTRL_REG5
+
+$28 constant L3G_OUT_X_L
+$29 constant L3G_OUT_X_H
+$2A constant L3G_OUT_Y_L
+$2B constant L3G_OUT_Y_H
+$2C constant L3G_OUT_Z_L
+$2D constant L3G_OUT_Z_H
+
+
+$20 constant LPS331_CTRL_REG1
+$21 constant LPS331_CTRL_REG2
+$22 constant LPS331_CTRL_REG3
+
+$28 constant LPS331_PRESS_OUT_XL
+$29 constant LPS331_PRESS_OUT_L
+$2A constant LPS331_PRESS_OUT_H
+
+$2B constant LPS331_TEMP_OUT_L
+$2C constant LPS331_TEMP_OUT_H
+
+\ -------------------------------------------------------------
+\  Magnetometer
+
+: writeMagReg ( register address -- ) MAG_ADDR i2c-reg! ;
+
+: mag-init ( -- )
+  \ Enable Magnetometer
+  \ 0x00 = 0b00000000
+  \ Continuous conversion mode
+  $00 LSM303_MR_REG_M  writeMagReg
+  $98 LSM303_CRA_REG_M writeMagReg \ 75Hz, enable temp sensor
+  $A0 LSM303_CRB_REG_M writeMagReg \ gain 2.5, xy 670, z 600
+;
+
+: mag-default ( -- )
+  $00 LSM303_MR_REG_M  writeMagReg
+  $08 LSM303_CRA_REG_M writeMagReg
+  $20 LSM303_CRB_REG_M writeMagReg
+;
+
+: readMag ( -- mx my mz )
+
+  LSM303_OUT_X_H_M MAG_ADDR
+
+  i2c-first-reg@  8 lshift
+  i2c-next-reg@  or sign16
+
+  i2c-next-reg@   8 lshift
+  i2c-next-reg@  or sign16
+
+  i2c-next-reg@   8 lshift
+  i2c-last-reg@  or sign16
+;
+
+\ -------------------------------------------------------------
+\  Accelerometer
+
+: writeAccReg ( register address -- ) ACCEL_ADDR i2c-reg! ;
+
+: accel-init
+  \ Enable Accelerometer
+  \ 0x27 = 0b00100111
+  \ Normal power mode, all axes enabled
+  \ $77 LSM303_CTRL_REG1_A writeAccReg \ 400Hz
+    $57 LSM303_CTRL_REG1_A writeAccReg \ normal 100Hz all axes enabled
+  \ $10 LSM303_CTRL_REG4_A writeAccReg \ Continuous update little endian +/- 4g
+    $98 LSM303_CTRL_REG4_A writeAccReg \ Update after read, little endian, +/- 4g, high resolution mode
+;
+
+: accel-default
+  $47 LSM303_CTRL_REG1_A writeAccReg \ 50Hz
+  $00 LSM303_CTRL_REG4_A writeAccReg \ +/-2g 1mg/LSB
+;
+
+: readAcc ( -- ax ay az )
+
+\   LSM303_OUT_X_L_A ACCEL_ADDR
+\
+\   i2c-first-reg@
+\   i2c-next-reg@  8 lshift or sign16
+\
+\   i2c-next-reg@
+\   i2c-next-reg@  8 lshift or sign16
+\
+\   i2c-next-reg@
+\   i2c-last-reg@  8 lshift or sign16
+\
+\   \ (12-bit resolution, left-aligned).
+
+
+  $28 ACCEL_ADDR i2c-reg@
+  $29 ACCEL_ADDR i2c-reg@ 8 lshift or sign16
+
+  $2A ACCEL_ADDR i2c-reg@
+  $2B ACCEL_ADDR i2c-reg@ 8 lshift or sign16
+
+  $2C ACCEL_ADDR i2c-reg@
+  $2D ACCEL_ADDR i2c-reg@ 8 lshift or sign16
+;
+
+\ -------------------------------------------------------------
+\  Gyroscope
+
+: writeGyroReg ( register address -- ) GYRO_ADDR i2c-reg! ;
+
+: gyro-init ( -- )
+  $0F L3G_CTRL_REG1 writeGyroReg   \ enable all, 100 hz
+  $00 L3G_CTRL_REG2 writeGyroReg   \ high pass filter
+  $00 L3G_CTRL_REG3 writeGyroReg
+\ $20 L3G_CTRL_REG4 writeGyroReg   \ 2000 dps
+\ $10 L3G_CTRL_REG4 writeGyroReg   \ 500 dps,
+  $90 L3G_CTRL_REG4 writeGyroReg   \ 500 dps, update after read
+  $00 L3G_CTRL_REG5 writeGyroReg
+;
+
+: gyro-default
+  $0F L3G_CTRL_REG1 writeGyroReg   \ enable all, 95 hz
+  $00 L3G_CTRL_REG4 writeGyroReg
+;
+
+: readGyro ( -- gx gy gz )
+
+  \ L3G_OUT_X_L GYRO_ADDR
+  \
+  \ i2c-first-reg@
+  \ i2c-next-reg@  8 lshift or sign16
+  \
+  \ i2c-next-reg@
+  \ i2c-next-reg@  8 lshift or sign16
+  \
+  \ i2c-next-reg@
+  \ i2c-last-reg@  8 lshift or sign16
+
+
+  $28 GYRO_ADDR i2c-reg@
+  $29 GYRO_ADDR i2c-reg@ 8 lshift or sign16
+
+  $2A GYRO_ADDR i2c-reg@
+  $2B GYRO_ADDR i2c-reg@ 8 lshift or sign16
+
+  $2C GYRO_ADDR i2c-reg@
+  $2D GYRO_ADDR i2c-reg@ 8 lshift or sign16
+;
+
+\ -------------------------------------------------------------
+\  Pressure sensor
+
+: writePressureReg ( register address -- ) PRESSURE_ADDR i2c-reg! ;
+
+: pressure-init ( -- )
+  $E0 LPS331_CTRL_REG1 writePressureReg \ active, update after read $84
+\   $00 LPS331_CTRL_REG2 writePressureReg \ default
+\   $00 LPS331_CTRL_REG3 writePressureReg \ default
+;
+
+: readPressure ( -- pressure temp )
+
+  LPS331_PRESS_OUT_XL PRESSURE_ADDR i2c-reg@
+  LPS331_PRESS_OUT_L  PRESSURE_ADDR i2c-reg@  8 lshift or
+  LPS331_PRESS_OUT_H  PRESSURE_ADDR i2c-reg@ 16 lshift or
+
+  LPS331_TEMP_OUT_L  PRESSURE_ADDR i2c-reg@
+  LPS331_TEMP_OUT_H  PRESSURE_ADDR i2c-reg@ 8 lshift or
+;
+
+\ -------------------------------------------------------------
+
+\ Test of all sensors
+
+: n.8 ( n -- ) DUP ABS 0 <# #s ROT SIGN #> dup 8 swap - spaces type ;
+
+: .mag ( -- )
+  readMag
+  -rot swap
+   ."  mx: " n.8
+  ." , my: " n.8
+  ." , mz: " n.8
+;
+
+: testmag ( -- )
+  i2c-init
+  mag-init
+  begin
+    cr
+    .mag
+    100 ms
+  key? until
+;
+
+: .acc ( -- )
+  readAcc
+  -rot swap
+   ."  ax: " n.8
+  ." , ay: " n.8
+  ." , az: " n.8
+;
+
+: testacc ( -- )
+  i2c-init
+  accel-init
+  begin
+    cr
+    .acc
+    100 ms
+  key? until
+;
+
+: .gyro ( -- )
+  readGyro
+  -rot swap
+   ."  gx: " n.8
+  ." , gy: " n.8
+  ." , gz: " n.8
+;
+
+: testgyro ( -- )
+  i2c-init
+  gyro-init
+  begin
+    cr
+    .gyro
+    100 ms
+  key? until
+;
+
+: .pressure ( -- )
+  readPressure
+  ."  temp: " n.8
+  ."  pressure: " n.8
+;
+
+: testpressure ( -- )
+  i2c-init
+  pressure-init
+  begin
+    cr
+    .pressure
+    100 ms
+  key? until
+;
+
+: testall ( -- )
+  i2c-init
+  mag-init accel-init gyro-init pressure-init
+  begin
+    cr
+    .mag .acc .gyro .pressure
+    100 ms
+  key? until
+;
