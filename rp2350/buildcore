@@ -1,6 +1,6 @@
 #!/bin/bash
 
-cat ../common/conditional.txt ../common/acrobatics.txt ../common/disassembler-rv32imc.txt ../common/fixpt-math-lib.fs ../common/dictionary-tools.txt basisdefinitions.txt > included.txt
+cat ../common/conditional.txt ../common/acrobatics.txt ../common/disassembler-rv32imc.txt ../common/fixpt-math-lib.fs ../common/dictionary-tools.txt ../common/dump.txt basisdefinitions.txt > included.txt
 
 fpc -XX quintusemu-rp2350.pas
 rm -f quintusemu-rp2350.o
@@ -8,7 +8,7 @@ rm -f quintusemu-rp2350.o
 {
    echo -e "compiletoflash\n"
    cat included.txt
-   echo -e "hex 20010000 DABBAD00 !\n"
+   echo -e "hex 20040000 DABBAD00 !\n"
    # cat -
 } | ./quintusemu-rp2350 mecrisp-quintus-rp2350.bin
 

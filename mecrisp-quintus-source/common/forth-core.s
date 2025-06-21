@@ -318,6 +318,11 @@ CoreDictionaryAnfang: # Dictionary-Einsprungpunkt setzen
 .endif
 
 .include "../common/stackjugglers.s"
+
+.ifdef letsroll
+.include "../common/roll.s"
+.endif
+
 .include "../common/comparisions.s"
 .include "../common/calculations.s"
 

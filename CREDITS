@@ -20,6 +20,7 @@ Port for CH56X by Hans Baier:
 Port for CH32V203F8P6 by Ivan Dimitrov
 Port for Thejas32 by Amith
 Port for CH32L103 by Peter Schildmann
+Clock initialisation, multicore and flash bootrom trampoline for RP2350 by Jim Morris (wolfmanjm)
 
 Hardware donations:
 

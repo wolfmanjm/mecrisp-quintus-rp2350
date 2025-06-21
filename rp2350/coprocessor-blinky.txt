@@ -29,5 +29,4 @@ SIO_BASE $030 + constant  GPIO_OE
   again
 ;
 
-stop-coprocessor
 ' blinky execute-coprocessor

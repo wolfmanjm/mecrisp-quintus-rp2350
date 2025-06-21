@@ -19,7 +19,6 @@
 .include "interrupts.s"
 .include "cycles.s"
 .include "../common/terminalhooks.s"
-.include "../common/roll.s"
 .include "multicore.s"
 
 # -----------------------------------------------------------------------------

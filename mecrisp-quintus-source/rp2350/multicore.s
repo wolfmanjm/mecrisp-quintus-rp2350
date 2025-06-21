@@ -11,17 +11,30 @@
 execute_coprocessor: # ( xt -- ) Entry point for the coprocessor trampoline
 # -----------------------------------------------------------------------------
 
+  push x1
+
   # Store the execution token into a global variable
   li x14, trampolineaddr # Note we are using li here as we forcefully circumvent the linker facilities
   sw x8, 0(x14)
   drop
 
-  call stop_core1 # make sure it is running in bootrom first
+  # Launcher code running on core 0 here...
+  # This actually launches the coprocessor_trampoline.
 
-  # Launcher code running on core 0 here... Save x3 to x13 before use
-  # This launches coprocessor_trampoline.
+  # Deactivate interrupts, because C code might "disconnect" the data stack pointer.
+  # Also save x3 to x13 before calling into C
 
-  j launch_core1
+  call eintq # Are interrupts enabled?
+    csrrci zero, mstatus, 8 # Clear Machine Interrupt Enable Bit
+
+  call stop_core1
+  call launch_core1
+
+  popda x15 # Do we need to reenable interrupts?
+  beq x15, zero, 1f
+    csrrsi zero, mstatus, 8 # Set Machine Interrupt Enable Bit
+1:pop x1
+  ret
 
 
 # -----------------------------------------------------------------------------
@@ -29,9 +42,23 @@ execute_coprocessor: # ( xt -- ) Entry point for the coprocessor trampoline
 stop_coprocessor: # ( -- )
 # -----------------------------------------------------------------------------
 
-  # Stop code running on core 0 here... Save x3 to x13 before use
+  push x1
 
-  j stop_core1
+  # Stop code running on core 0 here...
+
+  # Deactivate interrupts, because C code might "disconnect" the data stack pointer.
+  # Also save x3 to x13 before calling into C
+
+  call eintq # Are interrupts enabled?
+    csrrci zero, mstatus, 8 # Clear Machine Interrupt Enable Bit
+
+  call stop_core1
+
+  popda x15 # Do we need to reenable interrupts?
+  beq x15, zero, 1f
+    csrrsi zero, mstatus, 8 # Set Machine Interrupt Enable Bit
+1:pop x1
+  ret
 
 
 # -----------------------------------------------------------------------------
@@ -53,6 +80,9 @@ coprocessor_trampoline: # Runs on the second core now
   # Start cycle counter
   csrrwi zero, 0x320, 4  # MCOUNTINHIBIT: Keep minstret(h) stopped, but run mcycle(h).
 
+  # Disable interrupts
+  csrrci zero, mstatus, 8 # Clear Machine Interrupt Enable Bit
+
   # Initialise the registers for the Forth definition to run:
 
   li x2, returnstackcore1begin # Initialise return stack
@@ -64,17 +94,8 @@ coprocessor_trampoline: # Runs on the second core now
   jalr x1, x14, 0              # Execute it
 
 trampoline_trap:  # In case the Forth definition returns, catch execution here.
-	.equ BOOTROM_ENTRY_OFFSET, 0x7dfc
-    li a0, BOOTROM_ENTRY_OFFSET + 32 * 1024
-    la a1, 1f
-    csrw mtvec, a1
-    jr a0
-    # Go here if we trapped:
-.p2align 2
-1:  li a0, BOOTROM_ENTRY_OFFSET
-    jr a0
-  	# should not get here
-	j trampoline_trap
+  j trampoline_trap
+
 
 
 # -----------------------------------------------------------------------------
@@ -94,38 +115,6 @@ trampoline_trap:  # In case the Forth definition returns, catch execution here.
 # save these in my calls
 # x3=gp, x4=tp, x5=t0, x6=t1, x7=t2, x8=s0, x9=s1, x10=a0, x11=a1, x12=a2, x13=a3
 # -----------------------------------------------------------------------------
-
-.macro pushregs
-	addi sp, sp, -48
-  	sw ra, 0(sp)
-  	sw x3, 4(sp)
-	sw x4, 8(sp)
-  	sw x5, 12(sp)
-  	sw x6, 16(sp)
-  	sw x7, 20(sp)
-  	sw x8, 24(sp)
-  	sw x9, 28(sp)
-  	sw x10, 32(sp)
-  	sw x11, 36(sp)
-  	sw x12, 40(sp)
-  	sw x13, 44(sp)
-.endm
-
-.macro popregs
-  	lw ra, 0(sp)
-  	lw x3, 4(sp)
-	lw x4, 8(sp)
-  	lw x5, 12(sp)
-  	lw x6, 16(sp)
-  	lw x7, 20(sp)
-  	lw x8, 24(sp)
-  	lw x9, 28(sp)
-  	lw x10, 32(sp)
-  	lw x11, 36(sp)
-  	lw x12, 40(sp)
-  	lw x13, 44(sp)
-  	addi sp, sp, 48
-.endm
 
 # this is data handed off to bootrom to start core1
 .p2align 4

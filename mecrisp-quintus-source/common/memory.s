@@ -86,7 +86,7 @@ move:  # ( Quelladdr Zieladdr Byteanzahl -- ) ( Source Destination Count -- )
 
 # -----------------------------------------------------------------------------
   Definition Flag_visible, "fill"  # Fill memory with given byte.
-  # ( Destination Count Filling -- )
+fill:  # ( Destination Count Filling -- )
 # -----------------------------------------------------------------------------
   # 6.1.1540 FILL CORE ( c-addr u char -- ) If u is greater than zero, store char in each of u consecutive characters of memory beginning at c-addr.
 

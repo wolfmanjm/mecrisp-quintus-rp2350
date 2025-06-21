@@ -23,6 +23,7 @@
 .option norelax
 .option rvc
 .equ compressed_isa, 1
+.equ letsroll, 1
 
 # -----------------------------------------------------------------------------
 # Speicherkarte für Flash und RAM
@@ -31,16 +32,16 @@
 
 # Konstanten für die Größe des Ram-Speichers
 
-.equ RamAnfang,  0x20010000 # Start of RAM          Porting: Change this !
-.equ RamEnde,    0x20080000 # End   of RAM. 512 kb. Porting: Change this !
+.equ RamAnfang,  0x20040000 # Start of RAM          Porting: Change this !
+.equ RamEnde,    0x20080000 # End   of RAM. 256 kb. Porting: Change this !
 
 # Konstanten für die Größe und Aufteilung des Flash-Speichers
 
 .equ FlashAnfang, 0x20000000 # Start of Flash          Porting: Change this !
-.equ FlashEnde,   0x20010000 # End   of Flash.  64 kb. Porting: Change this !
+.equ FlashEnde,   0x20040000 # End   of Flash. 256 kb. Porting: Change this !
 
-.equ FlashDictionaryAnfang, FlashAnfang + 0x5000 # 20 kb reserved for core.
-.equ FlashDictionaryEnde,   FlashEnde            # 44 kb space for "user flash dictionary"
+.equ FlashDictionaryAnfang, FlashAnfang + 0x6000 #  24 kb reserved for core.
+.equ FlashDictionaryEnde,   FlashEnde            # 232 kb space for "user flash dictionary"
 
 # -----------------------------------------------------------------------------
 # Core start
@@ -105,4 +106,4 @@ Reset: # Forth begins here
   # Ready to fly !
   .include "../common/boot.s"
 
-.org 0x10000, 0xFF
+.org 0x40000, 0xFF
