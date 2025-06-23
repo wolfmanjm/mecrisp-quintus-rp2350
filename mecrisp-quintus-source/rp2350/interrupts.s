@@ -22,6 +22,7 @@
 
 .equ RVCSR_MEIEA_OFFSET, 0x00000be0
 .equ RVCSR_MEIFA_OFFSET, 0x00000be2
+.equ RVCSR_MIE_MEIE_BITS, 0x00000800
 
 # -----------------------------------------------------------------------------
   Definition Flag_visible, "enable-irq" # enable the IRQ
@@ -29,6 +30,10 @@ enable_irq:
 # -----------------------------------------------------------------------------
 	mv x14, x8
 	drop
+	# enable global interrupt
+    li x15, RVCSR_MIE_MEIE_BITS
+    csrw mie, x15
+    # enable specific interrupt
     srli x15, x14, 5 				# n
     slli x15, x15, 1				# 2*n
     andi x16, x14, 31 				# mask
