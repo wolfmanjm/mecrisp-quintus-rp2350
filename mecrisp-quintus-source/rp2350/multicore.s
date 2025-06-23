@@ -205,7 +205,7 @@ isr_riscv_machine_external_irq: j isr_riscv_machine_external_irq
 .equ RVCSR_MSTATUS_MIE_BITS,  0x00000008
 
 # enable/disable (a1=1|0) the irq specified in a0
-enable_irq:
+enable_disable_irq:
 		# irq_set_mask_n_enabled(num / 32, 1u << (num % 32), enabled);
         # hazard3_irqarray_clear(RVCSR_MEIFA_OFFSET, 2 * n, mask & 0xffffu);
         # hazard3_irqarray_clear(RVCSR_MEIFA_OFFSET, 2 * n + 1, mask >> 16);
@@ -246,7 +246,7 @@ launch_core1:
 	# disable FIFO IRQ
 1:	li a0, SIO_IRQ_FIFO
 	li a1, 0
-	call enable_irq
+	call enable_disable_irq
 
 	li t3, SIO_BASE
 	# send sequence to core1
@@ -303,7 +303,7 @@ stop_core1:
 	# disable FIFO IRQ
 	li a0, SIO_IRQ_FIFO
 	li a1, 0
-	call enable_irq
+	call enable_disable_irq
 	li t0, PSM_BASE|WRITE_CLR
 	li t1, b_FRCE_OFF_PROC1
 	sw t1, _FRCE_OFF(t0)

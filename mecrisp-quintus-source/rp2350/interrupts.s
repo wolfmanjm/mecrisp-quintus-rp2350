@@ -20,6 +20,51 @@
 
   .include "../common/interrupt-common.s"
 
+.equ RVCSR_MEIEA_OFFSET, 0x00000be0
+.equ RVCSR_MEIFA_OFFSET, 0x00000be2
+
+# -----------------------------------------------------------------------------
+  Definition Flag_visible, "enable-irq" # enable the IRQ
+enable_irq:
+# -----------------------------------------------------------------------------
+	mv x14, x8
+	drop
+    srli x15, x14, 5 				# n
+    slli x15, x15, 1				# 2*n
+    andi x16, x14, 31 				# mask
+    bset x16, zero, x16 			# bitset
+	slli x17, x16, 16				# upper 16 bits are bit to set (mask),
+	or x17, x17, x15 				# lower 5 bits are the window (n)
+	csrc RVCSR_MEIFA_OFFSET, x17
+	csrs RVCSR_MEIEA_OFFSET, x17 	# enable
+	srli x17, x16, 16
+	addi x15, x15, 1
+	slli x17, x17, 16				# upper 16 bits are bit to set (mask),
+	or x17, x17, x15 				# lower 5 bits are the window (n)
+	csrc RVCSR_MEIFA_OFFSET, x17
+	csrs RVCSR_MEIEA_OFFSET, x17
+	ret
+
+# -----------------------------------------------------------------------------
+  Definition Flag_visible, "disable-irq" # disable the IRQ
+disable_irq:
+# -----------------------------------------------------------------------------
+	mv x14, x8
+	drop
+    srli x15, x14, 5 				# n
+    slli x15, x15, 1				# 2*n
+    andi x16, x14, 31 				# mask
+    bset x16, zero, x16 			# bitset
+	slli x17, x16, 16				# upper 16 bits are bit to set (mask),
+	or x17, x17, x15 				# lower 5 bits are the window (n)
+	csrc RVCSR_MEIEA_OFFSET, x17 	# disable
+	srli x17, x16, 16
+	addi x15, x15, 1
+	slli x17, x17, 16				# upper 16 bits are bit to set (mask),
+	or x17, x17, x15 				# lower 5 bits are the window (n)
+ 	csrc RVCSR_MEIEA_OFFSET, x17
+	ret
+
 # -----------------------------------------------------------------------------
   Definition Flag_visible, "mepc!" # Where did it occour ?
 mepc_store:
