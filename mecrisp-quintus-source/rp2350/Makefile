@@ -6,7 +6,7 @@ AOPS = --warn --fatal-warnings
 
 all : mecrisp-quintus-rp2350.bin
 
-mecrisp-quintus-rp2350.o : mecrisp-quintus-rp2350.s clocks.s multicore.s terminal.s flash.s cycles.s
+mecrisp-quintus-rp2350.o : mecrisp-quintus-rp2350.s clocks.s multicore.s terminal.s flash.s cycles.s interrupts.s
 	$(ARMGNU)-as mecrisp-quintus-rp2350.s -o mecrisp-quintus-rp2350.o $(ASFLAGS)
 
 mecrisp-quintus-rp2350.bin : memmap mecrisp-quintus-rp2350.o

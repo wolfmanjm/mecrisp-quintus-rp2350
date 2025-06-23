@@ -23,6 +23,7 @@
 .equ RVCSR_MEIEA_OFFSET, 0x00000be0
 .equ RVCSR_MEIFA_OFFSET, 0x00000be2
 .equ RVCSR_MIE_MEIE_BITS, 0x00000800
+.equ RVCSR_MEINEXT_OFFSET, 0x00000be4
 
 # -----------------------------------------------------------------------------
   Definition Flag_visible, "enable-irq" # enable the IRQ
@@ -111,6 +112,14 @@ mcause_fetch:
   ret
 
 # -----------------------------------------------------------------------------
+  Definition Flag_visible, "meinext@" # Which external interrupt ?
+meinext_fetch:
+# -----------------------------------------------------------------------------
+  pushdatos
+  csrr x8, RVCSR_MEINEXT_OFFSET
+  ret
+
+# -----------------------------------------------------------------------------
   Definition Flag_visible, "fault" # Message for unhandled exceptions
 fault:
 # -----------------------------------------------------------------------------
@@ -128,7 +137,7 @@ fault:
 
   addi x15, x15,  2   # Skip 2 bytes for a compressed opcode
   bne  x14, zero, 1f
-    addi x15, x15,  2 # Skip 4 bytes in total for a long opcode
+  addi x15, x15,  2 # Skip 4 bytes in total for a long opcode
 
 1:csrrw x0, mepc, x15 # Set return address.
 
@@ -139,7 +148,7 @@ fault:
   Definition Flag_visible, "unhandled" # Message for wild interrupts
 unhandled:                             #   and handler for unused interrupts
 # -----------------------------------------------------------------------------
-  csrrs x15, mepc, zero
+  csrrs x15, mcause, zero
   blt zero, x15, fault # Exception (sign bit set) or interrupt?
 
   push x1
@@ -162,6 +171,11 @@ trap_signature:
   write "mepc: "
   call mepc_fetch
   call hexdot
+
+  # FOR DEBUG
+  # write "meinext: "
+  # call meinext_fetch
+  # call hexdot
 
   writeln "!"
 
