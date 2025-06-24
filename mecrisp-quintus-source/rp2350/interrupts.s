@@ -154,6 +154,11 @@ unhandled:                             #   and handler for unused interrupts
   push x1
 
   write "Unhandled Interrupt"
+  # print the interrupt number that it got
+  write " meinext: "
+  call meinext_fetch
+  srli x8, x8, 2
+  call hexdot
   call trap_signature
 
   pop x1
@@ -171,11 +176,6 @@ trap_signature:
   write "mepc: "
   call mepc_fetch
   call hexdot
-
-  # FOR DEBUG
-  # write "meinext: "
-  # call meinext_fetch
-  # call hexdot
 
   writeln "!"
 
