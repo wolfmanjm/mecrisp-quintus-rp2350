@@ -237,7 +237,20 @@ setup_150mhz_clock:
 	li t2, 1<<16
 	sw t2, _CLK_ADC_DIV(t1)
 
-  	lw ra, 0(sp)
+	# setup ticks to 1us base for all the timers
+	li t1, TICKS_BASE
+	li t2, 12 			# 12 ticks to get 1uS
+	li t3, 1
+	li t0, 6
+1:	sw zero, _TICKS_CTRL(t1)
+	sw t2, _TICKS_CYCLES(t1)
+	sw t3, _TICKS_CTRL(t1)
+	addi t0, t0, -1
+	beqz t0, 2f
+	addi t1, t1, 0x0C
+	j 1b
+
+2:	lw ra, 0(sp)
   	lw x3, 4(sp)
 	lw x4, 8(sp)
   	lw x5, 12(sp)
