@@ -27,7 +27,9 @@
 .equ _CLK_ADC_CTRL, 0x6c
 .equ _CLK_ADC_DIV, 0x70
 
-
+.equ _CLK_USB_CTRL, 0x60
+.equ _CLK_USB_DIV, 0x54
+.equ _CLK_USB_SELECTED, 0x68
 
 .equ _CLK_SYS_RESUS_CTRL, 0x84
 
@@ -72,7 +74,7 @@ setup_150mhz_clock:
 	sw t2, 0(t1)
 
 	li t1, XOSC_STARTUP   # Startup Delay (default = 50,000 cycles aprox.)
-	li t2, 0x0000011c
+	li t2, 0x0000011c     # 0x0BD8 maybe more stable
 	sw t2, 0(t1)
 
 	li t1, XOSC_CTRL | WRITE_SET   # Enable XOSC
@@ -228,6 +230,14 @@ setup_150mhz_clock:
 	li t1, CLOCKS_BASE
 	li t2, 1<<16
 	sw t2, _CLK_PERI_DIV(t1)
+
+	# Enable USB clock
+	li t1, CLOCKS_BASE | WRITE_SET
+	li t0, (0<<5) | (1<<11)    # AUXSRC = PLL_USB, Enable
+	sw t0, _CLK_USB_CTRL(t1)
+	li t1, CLOCKS_BASE
+	li t2, 1<<16
+	sw t2, _CLK_USB_DIV(t1)
 
 	# Enable ADC clock
 	li t1, CLOCKS_BASE | WRITE_SET

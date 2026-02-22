@@ -155,13 +155,20 @@ uart_init:
 
 .if FULLSPEED
 	# 115200 baud 81.38 with sysclk @ 150MHz
-	.equ UART_IBAUD, 81
-	.equ UART_FBAUD, 24
+	# .equ UART_IBAUD, 81
+	# .equ UART_FBAUD, 24
+	# 1000000 baud
+	# .equ UART_IBAUD, 9
+	# .equ UART_FBAUD, 24
+	# Baud Rate: 3000000	IBRD: 3 (0x0003) FBRD: 8 (0x08)
+	.equ UART_IBAUD, 3
+	.equ UART_FBAUD, 8
 .else
   	#   Baud: For a baud rate of 115200 with UARTCLK = 12MHz then:
   	#   Baud Rate Divisor = 12000000/(16 * 115200) ~= 6.5104
 	.equ UART_IBAUD, 6
 	.equ UART_FBAUD, 33
+
 .endif
   li x15, UART0_IBRD
   li x14, UART_IBAUD
