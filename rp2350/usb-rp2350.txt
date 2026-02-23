@@ -1,0 +1,680 @@
+
+\ -----------------------------------------------------------------------------
+\  USB terminal driver for RP2350
+\ -----------------------------------------------------------------------------
+
+\ Inspired by C baremetal examples by Douglas H. Summerville:
+\ https://github.com/dougsummerville/Bare-Metal-Raspberry-PI-Pico
+\ https://github.com/dougsummerville/Bare-Metal-Raspberry-PI-Pico/blob/main/drivers/usbcdc.c
+
+\ C code with polled operation and handshake:
+\ https://codeberg.org/Mecrisp/Bare-Metal-Raspberry-Pi-Pico/src/branch/main/drivers/usbcdc.c
+
+\ Douglas H. Summerville also added a Pi Pico 2 variant:
+\ https://github.com/dougsummerville/Bare-Metal-Raspberry-Pi-Pico-2
+\ https://github.com/dougsummerville/Bare-Metal-Raspberry-Pi-Pico-2/blob/dot/drivers/usbcdc.c
+
+\ But this one is a direct port of the RP2040 Forth USB driver.
+
+\ Many thanks to Jim Morris (wolfmanjm) for the clock setup in the Forth core.
+
+\ Quoting the datasheet for RP2350:
+
+\ All changes from RP2040 are a superset of the RP2040 features. Existing software for the RP2040 USB controller will
+\ continue to work with one exception: you must clear the MAIN_CTRL.PHY_ISO bit at startup and after power down
+\ events. We recommend leaving the LINESTATE_TUNING register at its reset value. Software should not clear this
+\ register.
+
+\ -----------------------------------------------------------------------------
+\  Small tools by Jan Bramkamp
+\ -----------------------------------------------------------------------------
+
+: bit ( u -- x ) 1 swap lshift 1-foldable inline ;
+
+: >r/w ( x -- x ) %11 12 lshift bic                  1-foldable inline ;
+: >xor ( x -- x ) %10 12 lshift bic %01 12 lshift or 1-foldable inline ;
+: >set ( x -- x ) %01 12 lshift bic %10 12 lshift or 1-foldable inline ;
+: >clr ( x -- x )                   %11 12 lshift or 1-foldable inline ;
+
+$40020000 constant RESET_REQ
+$40020004 constant WDSEL
+$40020008 constant RESET_DONE
+
+: reset-block   ( x -- ) RESET_REQ >set ! ;
+: unreset-block ( x -- ) RESET_REQ >clr ! ;
+: unreset-block-wait ( x -- ) dup unreset-block begin dup RESET_DONE bit@ until drop ;
+
+\ -----------------------------------------------------------------------------
+\  Descriptors
+\ -----------------------------------------------------------------------------
+
+: c, ( c -- ) here c! 1 allot ;
+
+create language_string_descriptor here
+  $04 c, $03 c,
+  $09 c,
+  $04 c,
+here align swap - constant language_string_descriptor.size
+
+create manufacturer_string_descriptor here
+  16 c, $03 c,
+  [char] M c, 0 c,
+  [char] e c, 0 c,
+  [char] c c, 0 c,
+  [char] r c, 0 c,
+  [char] i c, 0 c,
+  [char] s c, 0 c,
+  [char] p c, 0 c,
+here align swap - constant manufacturer_string_descriptor.size
+
+create configuration_string_descriptor here
+  18 c, $03 c,
+  [char] T c, 0 c,
+  [char] e c, 0 c,
+  [char] r c, 0 c,
+  [char] m c, 0 c,
+  [char] i c, 0 c,
+  [char] n c, 0 c,
+  [char] a c, 0 c,
+  [char] l c, 0 c,
+here align swap - constant configuration_string_descriptor.size
+
+64 constant MAX_PACKET_SIZE  \ 8,16,32,64
+
+create device_descriptor here
+   18 c, \ Length of this descriptor, in Bytes
+  $01 c, \ Descriptor type = 1 indicating device descriptor
+  $10 c, \ USB version (in BCD, lsb)
+  $01 c, \ USB version (in BCD, msb)
+  $02 c, \ Device class (02: communications
+  $00 c, \ Device subclass
+  $00 c, \ Device Protocol
+  MAX_PACKET_SIZE c, \ Maximum packet size target can process
+  $83 c, \ 0x28, \ Vendor ID (lsb)   ID 0d28:0204 NXP ARM mbed
+  $04 c, \ 0x0d, \ Vendor ID (msb)   ID 0483:5740 STMicroelectronics Virtual COM Port
+  $40 c, \ 0x04, \ Product ID (lsb)
+  $57 c, \ 0x02, \ Product ID (msb)
+  $01 c, \ Device Version (lsB)
+  $00 c, \ Device Version (msB)
+  $01 c, \ Index of Manufacturer string descriptor
+  $00 c, \ Index of Device string descriptor
+  $00 c, \ Index of Serial Number string descriptor
+  $01 c, \ Number of configurations
+here align swap - constant device_descriptor.size
+
+create config_descriptor here
+  $09 c,         \ bLength
+  $02 c,         \ bDescriptorType (Configuration)
+  $43 c,  $00 c, \ wTotalLength
+  $02 c,         \ bNumInterfaces 2
+  $01 c,         \ bConfigurationValue
+  $02 c,         \ iConfiguration (String Index)
+  $80 c,         \ bmAttributes
+  $32 c,         \ bMaxPower 100mA
+  \ Interface 1: Control
+  $09 c,         \ bLength
+  $04 c,         \ bDescriptorType (Interface)
+  $00 c,         \ bInterfaceNumber 0
+  $00 c,         \ bAlternateSetting
+  $01 c,         \ bNumEndpoints 1
+  $02 c,         \ bInterfaceClass (Communication)
+  $02 c,         \ bInterfaceSubClass (ACM
+  $01 c,         \ bInterfaceProtocol (AT Commands)
+  $00 c,         \ iInterface (String Index)
+  \ Header Functional Desc
+  $05 c,  $24 c,  $00 c,  $10 c,  $01 c,  \ (CS Interface)
+  $05 c,  $24 c,  $01 c,  $00 c,  $01 c,  \ Call Mgmt FD
+  $04 c,  $24 c,  $02 c,  $02 c,          \ ACM FD
+  $05 c,  $24 c,  $06 c,  $00 c,  $01 c,  \ Union FD
+  \ EP
+  $07 c,         \ bLength
+  $05 c,         \ bDescriptorType (Endpoint)
+  $81 c,         \ bEndpointAddress (IN/D2H)
+  $03 c,         \ bmAttributes (Interrupt)
+  $08 c,  $00 c, \ wMaxPacketSize 8
+  $FF c,         \ bInterval 16 (unit depends on device speed)
+  \ Interface 2: DATA
+  $09 c,         \ bLength
+  $04 c,         \ bDescriptorType (Interface)
+  $01 c,         \ bInterfaceNumber 1
+  $00 c,         \ bAlternateSetting
+  $02 c,         \ bNumEndpoints 2
+  $0A c,         \ bInterfaceClass (CDC)
+  $02 c,         \ bInterfaceSubClass
+  $00 c,         \ bInterfaceProtocol
+  $00 c,         \ iInterface (String Index)
+  \ EP 2
+  $07 c,         \ bLength
+  $05 c,         \ bDescriptorType (Endpoint)
+  $82 c,         \ bEndpointAddress (IN)
+  $02 c,         \ bmAttributes (Bulk)
+  MAX_PACKET_SIZE c,  $00 c,   \ wMaxPacketSize 64
+  $00 c,         \ bInterval 0 (unit depends on device speed)
+  \ EP 3
+  $07 c,         \ bLength
+  $05 c,         \ bDescriptorType (Endpoint)
+  $03 c,         \ bEndpointAddress (OUT)
+  $02 c,         \ bmAttributes (Bulk)
+  MAX_PACKET_SIZE c,  $00 c,   \ wMaxPacketSize 64
+  $00 c,         \ bInterval 0 (unit depends on device speed)
+here align swap - constant config_descriptor.size
+
+create line_coding here
+  $00 c,  $c2 c,  $01 c,  $00 c,  \ 115200
+  $00 c,  \ number stop 1 1.5 2
+  $00 c,  \ parity N O E M S
+  $08 c,  \ data 5,6,7,8,16
+here align swap - constant line_coding.size
+
+\ -----------------------------------------------------------------------------
+\  Registers
+\ -----------------------------------------------------------------------------
+
+$50110000 constant usbctrl.ADDR_ENDP
+$50110004 constant usbctrl.ADDR_ENDP1
+$50110008 constant usbctrl.ADDR_ENDP2
+$5011000c constant usbctrl.ADDR_ENDP3
+$50110010 constant usbctrl.ADDR_ENDP4
+$50110014 constant usbctrl.ADDR_ENDP5
+$50110018 constant usbctrl.ADDR_ENDP6
+$5011001c constant usbctrl.ADDR_ENDP7
+$50110020 constant usbctrl.ADDR_ENDP8
+$50110024 constant usbctrl.ADDR_ENDP9
+$50110028 constant usbctrl.ADDR_ENDP10
+$5011002c constant usbctrl.ADDR_ENDP11
+$50110030 constant usbctrl.ADDR_ENDP12
+$50110034 constant usbctrl.ADDR_ENDP13
+$50110038 constant usbctrl.ADDR_ENDP14
+$5011003c constant usbctrl.ADDR_ENDP15
+$50110040 constant usbctrl.MAIN_CTRL
+$50110044 constant usbctrl.SOF_WR
+$50110048 constant usbctrl.SOF_RD
+$5011004c constant usbctrl.SIE_CTRL
+$50110050 constant usbctrl.SIE_STATUS
+$50110054 constant usbctrl.INT_EP_CTRL
+$50110058 constant usbctrl.BUFF_STATUS
+$5011005c constant usbctrl.BUFF_CPU_SHOULD_HANDLE
+$50110060 constant usbctrl.EP_ABORT
+$50110064 constant usbctrl.EP_ABORT_DONE
+$50110068 constant usbctrl.EP_STALL_ARM
+$5011006c constant usbctrl.NAK_POLL
+$50110070 constant usbctrl.EP_STATUS_STALL_NAK
+$50110074 constant usbctrl.USB_MUXING
+$50110078 constant usbctrl.USB_PWR
+$5011007c constant usbctrl.USBPHY_DIRECT
+$50110080 constant usbctrl.USBPHY_DIRECT_OVERRIDE
+$50110084 constant usbctrl.USBPHY_TRIM
+$5011008c constant usbctrl.INTR
+$50110090 constant usbctrl.INTE
+$50110094 constant usbctrl.INTF
+$50110098 constant usbctrl.INTS
+
+\ -----------------------------------------------------------------------------
+\  Structure of DPRAM
+\ -----------------------------------------------------------------------------
+
+$50100000 constant USB_DPRAM
+
+\ EP Control Registers (EP0 space is used for setup packet
+
+$50100000 constant usbram.ep_control_reg[0].in
+$50100004 constant usbram.ep_control_reg[0].out
+$50100008 constant usbram.ep_control_reg[1].in
+$5010000C constant usbram.ep_control_reg[1].out
+$50100010 constant usbram.ep_control_reg[2].in
+$50100014 constant usbram.ep_control_reg[2].out
+$50100018 constant usbram.ep_control_reg[3].in
+$5010001C constant usbram.ep_control_reg[3].out
+
+\ Buffer Control Registers (datasheet recommends 16b writes)
+
+$50100080 constant usbram.ep_buffer_ctrl[0].in[0]
+$50100082 constant usbram.ep_buffer_ctrl[0].in[1]
+$50100084 constant usbram.ep_buffer_ctrl[0].out[0]
+$50100086 constant usbram.ep_buffer_ctrl[0].out[1]
+$50100088 constant usbram.ep_buffer_ctrl[1].in[0]
+$5010008A constant usbram.ep_buffer_ctrl[1].in[1]
+$5010008C constant usbram.ep_buffer_ctrl[1].out[0]
+$5010008E constant usbram.ep_buffer_ctrl[1].out[1]
+$50100090 constant usbram.ep_buffer_ctrl[2].in[0]
+$50100092 constant usbram.ep_buffer_ctrl[2].in[1]
+$50100094 constant usbram.ep_buffer_ctrl[2].out[0]
+$50100096 constant usbram.ep_buffer_ctrl[2].out[1]
+$50100098 constant usbram.ep_buffer_ctrl[3].in[0]
+$5010009A constant usbram.ep_buffer_ctrl[3].in[1]
+$5010009C constant usbram.ep_buffer_ctrl[3].out[0]
+$5010009E constant usbram.ep_buffer_ctrl[3].out[1]
+
+\ EP0 Buffer, hardwired
+
+$50100100 constant usbram.ep0_buffer
+
+\ Space for more data buffers, need to be aligned on 64 bytes
+
+$50100140 constant usbram.ep1_buffer
+$50100180 constant usbram.ep2_buffer
+$501001C0 constant usbram.ep3_buffer
+
+\ -----------------------------------------------------------------------------
+\  More variables that are not used by the USB hardware directly
+\  and therefore could be anywhere in RAM
+\ -----------------------------------------------------------------------------
+
+\ Endpoint states
+
+0 variable ep_state[0].source_data
+0 variable ep_state[0].bytes_remaining
+0 variable ep_state[0].data01
+
+0 variable ep_state[1].source_data
+0 variable ep_state[1].bytes_remaining
+0 variable ep_state[1].data01
+
+0 variable ep_state[2].source_data
+0 variable ep_state[2].bytes_remaining
+0 variable ep_state[2].data01
+
+0 variable ep_state[3].source_data
+0 variable ep_state[3].bytes_remaining
+0 variable ep_state[3].data01
+
+\ Housekeeping
+
+0 variable linestate
+0 variable device_addr
+
+: usb-connected? ( -- ? ) linestate @ 1 and 0<> ; \ Check DTR
+
+\ -----------------------------------------------------------------------------
+\  Ring buffers for terminal streams
+\ -----------------------------------------------------------------------------
+
+2048 constant rx-ring-size \ Buffer sizes must be powers of two.
+2048 constant tx-ring-size
+
+0 variable tx-head
+0 variable tx-tail
+tx-ring-size buffer: tx-ring
+
+: tx-head-next   ( -- offset ) tx-head @ 1+ tx-ring-size 1- and ;
+: tx-tail-next   ( -- offset ) tx-tail @ 1+ tx-ring-size 1- and ;
+: tx-ring-empty? ( -- ? )      tx-head @    tx-tail @ = ;
+: tx-ring-full?  ( -- ? )      tx-head-next tx-tail @ = ;
+: tx-ring-len    ( -- u )      tx-head @ tx-tail @ - tx-ring-size 1- and ;
+: >tx-ring       ( c -- )      tx-ring tx-head @ + c!  tx-head-next tx-head ! ;
+:  tx-ring>      ( -- c )      tx-ring tx-tail @ + c@  tx-tail-next tx-tail ! ;
+
+0 variable rx-head
+0 variable rx-tail
+rx-ring-size buffer: rx-ring
+
+: rx-head-next   ( -- offset ) rx-head @ 1+ rx-ring-size 1- and ;
+: rx-tail-next   ( -- offset ) rx-tail @ 1+ rx-ring-size 1- and ;
+: rx-ring-empty? ( -- ? )      rx-head @    rx-tail @ = ;
+: rx-ring-full?  ( -- ? )      rx-head-next rx-tail @ = ;
+: rx-ring-len    ( -- u )      rx-head @ rx-tail @ - rx-ring-size 1- and ;
+: >rx-ring       ( c -- )      rx-ring rx-head @ + c!  rx-head-next rx-head ! ;
+:  rx-ring>      ( -- c )      rx-ring rx-tail @ + c@  rx-tail-next rx-tail ! ;
+
+\ -----------------------------------------------------------------------------
+\  Data structures for setup packets
+\ -----------------------------------------------------------------------------
+
+\ Create struct to represent setup packet and map it to EP_CTRL_REG[0]
+
+$50100000 constant setup_packet.wRequest
+$50100000 constant   setup_packet.bmRequestType
+$50100001 constant   setup_packet.bRequest
+
+$50100002 constant setup_packet.wValue
+$50100002 constant   setup_packet.wValue_L
+$50100003 constant   setup_packet.wValue_H
+
+$50100004 constant setup_packet.wIndex
+$50100006 constant setup_packet.wLength
+
+\ -----------------------------------------------------------------------------
+\  Small tools for handling packets
+\ -----------------------------------------------------------------------------
+
+: free_ep3_output_buf_and_toggle_data_sync ( -- )
+
+  MAX_PACKET_SIZE
+  ep_state[3].data01 @ if $2000 or else $0000 or then  \ data01 bit
+
+  dup      usbram.ep_buffer_ctrl[3].out[0] h!
+  ep_state[3].data01 @ not ep_state[3].data01 ! \ Satisfies delay before setting AVAIL
+  $0400 or usbram.ep_buffer_ctrl[3].out[0] h! \ Set AVAIL several cycles after
+;
+
+: prepare_in_buffer_on_ep0 ( -- )
+
+  ep_state[0].bytes_remaining @ MAX_PACKET_SIZE umin   ( desc_len )
+  dup negate ep_state[0].bytes_remaining +!            ( desc_len )
+
+  dup
+  ep_state[0].source_data @ swap   ( desc_len source desc_len)
+  usbram.ep0_buffer         swap   ( desc_len source destination desc_len )
+  move
+
+  dup ep_state[0].source_data +!
+
+  ep_state[0].data01 @ if $A000 or else $8000 or then
+
+  dup      usbram.ep_buffer_ctrl[0].in[0] h!
+  ep_state[0].data01 @ not ep_state[0].data01 ! \ Satisfies delay before setting AVAIL
+  $0400 or usbram.ep_buffer_ctrl[0].in[0] h! \ Set AVAIL several cycles after
+;
+
+\ -----------------------------------------------------------------------------
+\  Setup packet handler
+\ -----------------------------------------------------------------------------
+
+: usb_setup_handling ( -- )
+
+  \ Prepare empty response
+  \ If we're receiving a setup and there is still data waiting to be sent, something went wrong. Throw away remaining data.
+
+   0 ep_state[0].source_data !
+   0 ep_state[0].bytes_remaining !
+  -1 ep_state[0].data01 !
+
+  \ There may be an out stage (e.g. set line coding)
+  $2400 usbram.ep_buffer_ctrl[0].out[0] h! \ DATA1
+
+  setup_packet.wRequest h@
+  case
+
+    $0680 of  \ Std Dev- Get Descriptor
+      setup_packet.wValue_H c@
+      case
+        $01 of  \ Device
+          device_descriptor      ep_state[0].source_data !
+          device_descriptor.size ep_state[0].bytes_remaining !
+        endof
+
+        $02 of  \ Config
+          config_descriptor      ep_state[0].source_data !
+          config_descriptor.size ep_state[0].bytes_remaining !
+        endof
+
+        $03 of  \ String
+          setup_packet.wValue_L c@
+          case
+            $00 of
+              language_string_descriptor           ep_state[0].source_data !
+              language_string_descriptor.size      ep_state[0].bytes_remaining !
+            endof
+            $01 of
+              manufacturer_string_descriptor       ep_state[0].source_data !
+              manufacturer_string_descriptor.size  ep_state[0].bytes_remaining !
+            endof
+            $02 of
+              configuration_string_descriptor      ep_state[0].source_data !
+              configuration_string_descriptor.size ep_state[0].bytes_remaining !
+            endof
+          endcase
+        endof
+      endcase
+    endof
+
+   $0500 of  \ Std Dev- Set Address
+    setup_packet.wValue h@ $FF and device_addr !
+    \ zero len status will be sent
+   endof
+
+\  $0102 of  \ CDC Set Communications Feature
+\  endof
+
+\  $2021 of  \ Class Interface Set line coding
+\  endof
+
+   $2221 of  \ Class Interface Set line state
+     setup_packet.wValue h@ linestate !
+   endof
+
+\  $0900 of  \ Std Dev- Set Config
+\    \ zero len status will be sent
+\  endof
+
+   $21A1 of  \ Class Interface Get Line Coding
+     line_coding      ep_state[0].source_data !
+     line_coding.size ep_state[0].bytes_remaining !
+   endof
+
+  endcase
+
+  \ Simplify code by always preparing IN packet (no harm if not needed)
+  \ If no dedicated response has been prepared, a zero-length status packet will be generated
+
+  ep_state[0].bytes_remaining @ setup_packet.wLength h@ umin ep_state[0].bytes_remaining !
+  prepare_in_buffer_on_ep0
+;
+
+\ -----------------------------------------------------------------------------
+\  USB request handler
+\ -----------------------------------------------------------------------------
+
+: usb-poll ( -- )
+
+  \ Setup packet received
+  usbctrl.SIE_STATUS @ 17 bit and \ USBCTRL_SIE_STATUS_SETUP_REC
+  if
+    usb_setup_handling
+    17 bit usbctrl.SIE_STATUS >clr !
+  then
+
+  \ IN of config data Pico --> Host completed, maybe send more
+  usbram.ep_buffer_ctrl[0].in[0] h@ 10 bit and 0=
+  if
+    \ Addr is set only after SetAddress; if set, just finished status stage with old addr
+    device_addr @
+    if
+      device_addr @ usbctrl.ADDR_ENDP !
+      0 device_addr !
+    else
+      ep_state[0].bytes_remaining @ if prepare_in_buffer_on_ep0 then
+    then
+  then
+
+  \ Received an USB reset
+  usbctrl.SIE_STATUS @ 19 bit and \ USBCTRL_SIE_STATUS_BUS_RESET
+  if
+    0 linestate !
+
+    \ Reset address
+    0 usbctrl.ADDR_ENDP !
+    0 device_addr !
+
+    \ Clear state
+    0 ep_state[0].data01 !
+    0 ep_state[0].bytes_remaining !
+
+    0 ep_state[1].data01 !
+    0 ep_state[1].bytes_remaining !
+
+    0 ep_state[2].data01 !
+    0 ep_state[2].bytes_remaining !
+
+    0 ep_state[3].data01 !
+    0 ep_state[3].bytes_remaining !
+
+    \ EP3 is Bulk in need to prime RX buf
+    free_ep3_output_buf_and_toggle_data_sync
+
+    19 bit usbctrl.SIE_STATUS >clr !
+
+    \ Reset ring buffers
+    0 tx-tail ! 0 tx-head !
+    0 rx-tail ! 0 rx-head !
+  then
+
+  \ Get stream data received from host into the ring buffer, if possible.
+  \ Maximum incoming packet size is limited to 64.
+
+  \ Do not release the endpoint output buffer if the contents do not fit into the rx buf.
+  \ NAK replies will be send until the buffer is consumed.
+
+  \ Data received, as indicated by "buffer full" flag? --> Fetch data!
+  usbram.ep_buffer_ctrl[3].out[0] h@ $8000 and
+  if
+    usbram.ep_buffer_ctrl[3].out[0] h@ $03FF and ( length-of-incoming-data )
+    dup rx-ring-size rx-ring-len - u< \ Enough space to move the contents of the packet into the ring?
+    if
+      0 ?do usbram.ep3_buffer i + c@ >rx-ring loop
+      free_ep3_output_buf_and_toggle_data_sync
+    else
+      drop
+    then
+  then
+
+  \ Transmit stream data to the host only when connection is live
+  \ Prepare a descriptor on EP2 from TX Ring Buf iff buffer is free
+
+  usb-connected?
+  if
+    \ EP buffer not in use and something to transmit waits
+    tx-ring-empty?                                       \ Nothing to transmit
+    usbram.ep_buffer_ctrl[2].in[0] h@ 15 bit and 0<> or   \ Buffer currently in use
+    usbctrl.ADDR_ENDP 0= or                                \ Not yet enumerated
+    not                                                     \ --> Nothing to do.
+
+    if
+      tx-ring-len MAX_PACKET_SIZE umin ( desc_len )
+      dup 0 ?do tx-ring> usbram.ep2_buffer i + c! loop
+
+      ep_state[2].data01 @ if $A000 or else $8000 or then
+
+      dup      usbram.ep_buffer_ctrl[2].in[0] h!
+      ep_state[2].data01 @ not ep_state[2].data01 ! \ Satisfies delay before setting AVAIL
+      $0400 or usbram.ep_buffer_ctrl[2].in[0] h! \ Set AVAIL several cycles after
+    then
+  then
+;
+
+\ -----------------------------------------------------------------------------
+\ Hardware initialisation
+\ -----------------------------------------------------------------------------
+
+: usb-init ( -- )
+
+  \ Bring USB peripheral into a known state
+  28 bit ( RESET_USBCTRL ) dup reset-block unreset-block-wait
+
+  \ Clear USB DPRAM
+  USB_DPRAM 4096 0 fill
+
+  \ Reset ring buffers
+  0 tx-tail ! 0 tx-head !
+  0 rx-tail ! 0 rx-head !
+
+  \ No DTR before enumeration
+  0 linestate !
+
+  \ Connect USB to PHY (should be by default)
+  0 bit    \ USBCTRL_USB_MUXING_TO_PHY
+  3 bit or \ USBCTRL_USB_MUXING_SOFTCON
+  usbctrl.usb_muxing !
+
+  \ Bus power should be available.
+  2 bit    \ USBCTRL_USB_PWR_VBUS_DETECT
+  3 bit or \ USBCTRL_USB_PWR_VBUS_DETECT_OVERRIDE_EN
+  usbctrl.usb_pwr !
+
+  \ Enable controller in device mode and clear PHY_ISO bit
+  1 usbctrl.main_ctrl !
+
+  \ Set bit in BUFF_STATUS for every buffer completed on RW EP0
+  29 bit usbctrl.sie_ctrl ! \ USBCTRL_SIE_CTRL_EP0_INT_1BUF
+
+  \ -----------------------------------------------------------
+  \ Set up endpoints
+  \ -----------------------------------------------------------
+
+  \ EP0 is hardwired and needs no further configuration
+
+  \ EP1 IN is for control interface
+
+  usbram.ep1_buffer $FFFF and
+    1 31 lshift or  \ Endpoint Enable
+    0 30 lshift or  \ Single Buffered
+    0 29 lshift or  \ Disable IRQ every xfer
+    0 28 lshift or  \ No Double Buffered IRQ
+    0 26 lshift or  \ 2-bit Control Endpoint Type (CONTROL:0)
+    0 18 lshift or  \ Reserved
+    0 17 lshift or  \ IRQ on Stall
+    0 26 lshift or  \ IRQ on NAK
+  usbram.ep_control_reg[1].in !
+
+  \ EP2 IN is for bulk IN
+
+  usbram.ep2_buffer $FFFF and
+    1 31 lshift or  \ Endpoint Enable
+    0 30 lshift or  \ Single Buffered
+    0 29 lshift or  \ Disable IRQ every xfer
+    0 28 lshift or  \ No Double Buffered IRQ
+    2 26 lshift or  \ 2-bit Control Endpoint Type (BULK:2)
+    0 18 lshift or  \ Reserved
+    0 17 lshift or  \ IRQ on Stall
+    0 26 lshift or  \ IRQ on NAK
+  usbram.ep_control_reg[2].in !
+
+  \ EP3 OUT is for bulk OUT
+  usbram.ep3_buffer $FFFF and
+    1 31 lshift or  \ Endpoint Enable
+    0 30 lshift or  \ Single Buffered
+    0 29 lshift or  \ Disable IRQ every xfer
+    0 28 lshift or  \ No Double Buffered IRQ
+    2 26 lshift or  \ 2-bit Control Endpoint Type (BULK:2)
+    0 18 lshift or  \ Reserved
+    0 17 lshift or  \ IRQ on Stall
+    0 26 lshift or  \ IRQ on NAK
+  usbram.ep_control_reg[3].out !
+
+  \ No DTR before enumeration
+  0 linestate !
+
+  \ Enable pull-ups to signal connect to host
+  16 bit usbctrl.sie_ctrl >set ! \ USBCTRL_SIE_CTRL_PULLUP_EN
+;
+
+\ -----------------------------------------------------------------------------
+\  Terminal using the ring buffers
+\ -----------------------------------------------------------------------------
+
+: usb-key?  ( -- ? ) pause usb-poll rx-ring-empty? 0= ;
+: usb-emit? ( -- ? ) pause usb-poll tx-ring-full?  0= ;
+: usb-key   ( -- c ) begin usb-key?  until  rx-ring>         ;
+: usb-emit  ( c -- ) begin usb-emit? until >tx-ring usb-poll ;
+
+\ -----------------------------------------------------------------------------
+
+\ : try ( -- )
+\   usb-init
+\   begin
+\     usb-poll
+\     usb-key? if usb-key emit then
+\   key? until
+\ ;
+
+: +usb ( -- )
+    ['] usb-key?  hook-key?  !
+    ['] usb-key   hook-key   !
+    ['] usb-emit? hook-emit? !
+    ['] usb-emit  hook-emit  !
+;
+
+: -usb ( -- )
+    ['] serial-key?  hook-key?  !
+    ['] serial-key   hook-key   !
+    ['] serial-emit? hook-emit? !
+    ['] serial-emit  hook-emit  !
+;
+
+: usb-terminal ( -- )
+  usb-init
+  ['] usb-poll hook-pause !
+  +usb
+;
+
+\ -----------------------------------------------------------------------------
