@@ -54,6 +54,9 @@
 .equ FlashDictionaryAnfang, FlashAnfang + 0x5000 # 20 kb reserved for core.
 .equ FlashDictionaryEnde,   FlashEnde
 
+# define this to use 144MHz PLL, otherwise uses HSI at 8MHz
+.equ USE_PLL_144MHZ, 1
+
 # -----------------------------------------------------------------------------
 # Core start
 # -----------------------------------------------------------------------------
@@ -213,7 +216,47 @@ Reset: # Forth begins here
   li  x14,0x009F0000
   sw  x14,8(x15)
    #   SetSysClock();
+.if USE_PLL_144MHZ
+  # Set extend register to not divide HSI by 2 for PLL
+  li  x14,0x40023800
+  lw  x13,0(x14)
+  ori x13,x13,0x10
+  sw x13,0(x14)
+
+	# PLLCONFIG = RCC_PLLMul_18 18*8 = 144MHz
+	lw  x14,4(x15)
+  li  x13,0xFFC0FFFF
+  and x14,x14,x13
+  li  x13,0x003C0000
+  or  x14,x14,x13
+  sw  x14,4(x15)
+	# enable PLL RCC->CTLR |= (1<<24);
+  lw  x14,0(x15)
+  li  x13,1<<24
+  or  x14,x14,x13
+  sw  x14,0(x15)
+	# Wait for PLL ready
+  li  x13,1<<25
+1:
+  lw  x14,0(x15)
+  and x14,x13,x14
+  beqz x14, 1b
+  # Switch System Clock to PLL
+  lw  x14,4(x15)
+  li  x13,0xFFFFFFFC
+  and x14,x14,x13
+  ori x14,x14,0x02
+  sw  x14,4(x15)
+  # wait for it to be used
+  li x13, 8
+1:
+  lw x14,4(x15)
+  andi x14,x14,0x0C
+  bne x14,x13,1b
+
+.else
   nop # the HSI is used as System clock
+.endif
 
   # Initialisations for terminal hardware, without stacks
   call uart_init
@@ -221,7 +264,10 @@ Reset: # Forth begins here
   # Catch the pointers for Flash dictionary
   .include "../common/catchflashpointers.s"
 
+.if USE_PLL_144MHZ
+  welcome " for RISC-V RV32IMC on CH32V203G6 @ 144MHz by Matthias Koch"
+.else
   welcome " for RISC-V RV32IMC on CH32V203G6 by Matthias Koch"
-
+.endif
   # Ready to fly !
   .include "../common/boot.s"

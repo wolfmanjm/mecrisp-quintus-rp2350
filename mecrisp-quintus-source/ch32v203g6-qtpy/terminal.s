@@ -128,17 +128,34 @@ uart_init:
   #
   li  x15, R32_USART2_STATR
 # 115200 bps at 8Mhz HSI
+.if 0
   li  x14, 69
   sw  x14, OFFSET_BRR(x15)
   li  x14, 0b1100
   sw  x14, OFFSET_CTLR1(x15)
-  li  x14, 2<<12
+  li  x14, 2<<12				# 2 stop bits
   sw  x14, OFFSET_CTLR2(x15)
   lw  x14, OFFSET_CTLR1(x15)
   li  x15, 1<<13
   or  x14, x14,x15
   li  x15, R32_USART2_STATR
   sw  x14, OFFSET_CTLR1(x15)
+.else
+# 78<<4 + 2 for 115200 baud at 144MHz PLL
+# 4<<4 + 8 for 2000000 baud at 144MHz PLL
+  li  x14, (4<<4) + 8
+  #li  x14, (78<<4) + 2
+  sw  x14, OFFSET_BRR(x15)
+  li  x14, 0b1100
+  sw  x14, OFFSET_CTLR1(x15)
+  li  x14, 1<<12				# 1 stop bit
+  sw  x14, OFFSET_CTLR2(x15)
+  lw  x14, OFFSET_CTLR1(x15)
+  li  x15, 1<<13
+  or  x14, x14,x15
+  li  x15, R32_USART2_STATR
+  sw  x14, OFFSET_CTLR1(x15)
+.endif
 
   ret
 
